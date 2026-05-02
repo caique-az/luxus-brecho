@@ -2,7 +2,7 @@
 Decorators customizados para a aplicação.
 """
 from functools import wraps
-from flask import request, jsonify, g, current_app
+from flask import request, jsonify, current_app
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,24 +35,6 @@ def validate_json(*required_fields):
         return decorated_function
     return decorator
 
-
-def admin_required(f):
-    """
-    Decorator que exige que o usuário seja administrador.
-    Deve ser usado APÓS jwt_required.
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        user_type = getattr(g, 'user_type', None)
-        
-        if not user_type:
-            return jsonify({'message': 'Autenticação necessária'}), 401
-
-        if user_type != 'Administrador':
-            return jsonify({'message': 'Acesso negado. Apenas administradores podem acessar este recurso'}), 403
-        
-        return f(*args, **kwargs)
-    return decorated_function
 
 
 def log_request(action):
