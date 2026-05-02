@@ -29,7 +29,6 @@ from ..utils.validators import (
     prevent_nosql_injection
 )
 from ..utils.decorators import (
-    rate_limit,
     validate_json,
     log_request,
     handle_errors,
@@ -132,7 +131,6 @@ def get_user(id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
-@rate_limit("3 per minute")
 @validate_json('nome', 'email', 'senha')
 @log_request("CREATE_USER")
 @handle_errors
@@ -309,7 +307,6 @@ def delete_user(id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
-@rate_limit("5 per minute")
 @validate_json('email', 'senha')
 @log_request("AUTH_LOGIN")
 @handle_errors
@@ -405,7 +402,6 @@ def refresh_token_endpoint():
 
 
 @jwt_required
-@rate_limit("3 per hour")
 @validate_json('senha_atual', 'senha_nova')
 @log_request("CHANGE_PASSWORD")
 @handle_errors

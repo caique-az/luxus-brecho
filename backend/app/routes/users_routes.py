@@ -54,8 +54,16 @@ def get_user_endpoint(id):
     """Busca usuário - dono ou admin."""
     return get_user(id)
 
-# Criação de usuário é pública (registro)
-users_bp.route("/", methods=["POST"])(create_user)
+@users_bp.route("/", methods=["POST"])
+def create_user_endpoint():
+    """Registro de usuário com rate limiting."""
+    limiter = _get_limiter()
+    if limiter:
+        @limiter.limit("3 per minute;10 per hour")
+        def limited_create():
+            return create_user()
+        return limited_create()
+    return create_user()
 
 @users_bp.route("/<int:id>", methods=["PUT"])
 @owner_or_admin_required('id')
@@ -85,7 +93,13 @@ def auth_endpoint():
 @users_bp.route("/<int:id>/change-password", methods=["PUT"])
 @owner_or_admin_required('id')
 def change_password_endpoint(id):
-    """Altera senha - dono ou admin."""
+    """Altera senha - dono ou admin, com rate limiting."""
+    limiter = _get_limiter()
+    if limiter:
+        @limiter.limit("3 per hour")
+        def limited_change():
+            return change_password(id)
+        return limited_change()
     return change_password(id)
 
 # Rota de refresh token

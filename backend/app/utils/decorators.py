@@ -3,41 +3,9 @@ Decorators customizados para a aplicação.
 """
 from functools import wraps
 from flask import request, jsonify, g, current_app
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def rate_limit(limit_string):
-    """
-    Decorator para aplicar rate limiting a uma rota.
-    
-    Args:
-        limit_string: String de limite (ex: "5 per minute")
-    """
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            # Verifica se limiter está disponível
-            limiter = getattr(current_app, 'limiter', None)
-            if limiter and current_app.config.get('RATELIMIT_ENABLED', True):
-                try:
-                    # Aplica rate limit
-                    with limiter.limit(limit_string):
-                        return f(*args, **kwargs)
-                except Exception as e:
-                    logger.warning(f"Rate limit excedido: {e}")
-                    return jsonify({
-                        'error': 'Muitas requisições. Tente novamente mais tarde.',
-                        'retry_after': 60
-                    }), 429
-            else:
-                # Se não houver limiter, executa normalmente
-                return f(*args, **kwargs)
-        return decorated_function
-    return decorator
 
 
 def validate_json(*required_fields):
