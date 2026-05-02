@@ -4,17 +4,38 @@ Gerencia criação, validação e refresh de tokens.
 """
 import os
 import jwt
+import hashlib
+import hmac
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, Tuple
 from functools import wraps
 from flask import request, jsonify, g, current_app
+import logging
 
+logger = logging.getLogger(__name__)
 
-# Configurações JWT
-JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'luxus-brecho-secret-key-change-in-production')
-JWT_ALGORITHM = 'HS256'
-JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)  # Token de acesso expira em 24h
-JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)  # Token de refresh expira em 30 dias
+def _get_config():
+    """Obtém configuração JWT do app ou usa defaults seguros."""
+    try:
+        from config import get_config
+        cfg = get_config()
+        return {
+            'secret_key': cfg.JWT_SECRET_KEY,
+            'algorithm': cfg.JWT_ALGORITHM,
+            'access_expires': cfg.JWT_ACCESS_TOKEN_EXPIRES,
+            'refresh_expires': cfg.JWT_REFRESH_TOKEN_EXPIRES
+        }
+    except:
+        # Fallback apenas para desenvolvimento
+        if os.environ.get('FLASK_DEBUG', 'False').lower() == 'true':
+            return {
+                'secret_key': os.environ.get('JWT_SECRET_KEY', 'dev-secret-key'),
+                'algorithm': 'HS256',
+                'access_expires': timedelta(hours=24),
+                'refresh_expires': timedelta(days=30)
+            }
+        else:
+            raise RuntimeError("JWT configuration not available in production")
 
 
 def create_access_token(user_id: int, user_type: str, email: str) -> str:
@@ -29,16 +50,18 @@ def create_access_token(user_id: int, user_type: str, email: str) -> str:
     Returns:
         Token JWT codificado
     """
+    config = _get_config()
     now = datetime.now(timezone.utc)
     payload = {
         'sub': user_id,  # Subject (ID do usuário)
         'type': user_type,
         'email': email,
         'iat': now,  # Issued at
-        'exp': now + JWT_ACCESS_TOKEN_EXPIRES,  # Expiration
-        'token_type': 'access'
+        'exp': now + config['access_expires'],  # Expiration
+        'token_type': 'access',
+        'jti': hashlib.sha256(f"{user_id}{now.timestamp()}".encode()).hexdigest()[:16]  # JWT ID único
     }
-    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return jwt.encode(payload, config['secret_key'], algorithm=config['algorithm'])
 
 
 def create_refresh_token(user_id: int) -> str:
@@ -51,14 +74,16 @@ def create_refresh_token(user_id: int) -> str:
     Returns:
         Token JWT de refresh codificado
     """
+    config = _get_config()
     now = datetime.now(timezone.utc)
     payload = {
         'sub': user_id,
         'iat': now,
-        'exp': now + JWT_REFRESH_TOKEN_EXPIRES,
-        'token_type': 'refresh'
+        'exp': now + config['refresh_expires'],
+        'token_type': 'refresh',
+        'jti': hashlib.sha256(f"{user_id}{now.timestamp()}refresh".encode()).hexdigest()[:16]
     }
-    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return jwt.encode(payload, config['secret_key'], algorithm=config['algorithm'])
 
 
 def decode_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
@@ -71,8 +96,9 @@ def decode_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]], Optional[s
     Returns:
         Tupla (sucesso, payload, mensagem_erro)
     """
+    config = _get_config()
     try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, config['secret_key'], algorithms=[config['algorithm']])
         return True, payload, None
     except jwt.ExpiredSignatureError:
         return False, None, 'Token expirado'

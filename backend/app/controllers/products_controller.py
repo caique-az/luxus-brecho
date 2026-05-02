@@ -1,16 +1,24 @@
-from flask import request, jsonify, current_app
-from pymongo.errors import DuplicateKeyError
+from flask import jsonify, request, current_app
+from datetime import datetime
+from typing import Dict, Any
 from bson import ObjectId
-from typing import Any, Dict
+from pymongo.errors import DuplicateKeyError
 import time
 
 from ..models.product_model import (
     get_collection,
-    prepare_new_product,
-    validate_product,
     normalize_product,
+    validate_product,
+    prepare_new_product,
 )
-from ..services.supabase_storage import storage_service
+
+from ..services import storage as storage_service
+from ..services.cache_service import (
+    cache_product,
+    get_cached_product,
+    invalidate_product_cache,
+    cache_result
+)
 
 
 def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -106,12 +114,22 @@ def get_product(id: int):
     db = current_app.db
     if db is None:
         return jsonify(message="banco de dados indisponível"), 503
+    
+    # Tenta obter do cache primeiro
+    cached = get_cached_product(int(id))
+    if cached:
+        return jsonify(cached)
+    
     coll = get_collection(db)
-
     doc = coll.find_one({"id": int(id)})
     if not doc:
         return jsonify(message="produto não encontrado"), 404
-    return jsonify(_serialize(doc))
+    
+    # Serializa e cacheia o produto
+    product_data = _serialize(doc)
+    cache_product(int(id), product_data, ttl=600)  # Cache por 10 minutos
+    
+    return jsonify(product_data)
 
 
 def create_product():
@@ -159,6 +177,10 @@ def update_product(id: int):
 
     coll.update_one({"id": int(id)}, {"$set": merged})
     updated = coll.find_one({"id": int(id)})
+    
+    # Invalida cache do produto atualizado
+    invalidate_product_cache(int(id))
+    
     return jsonify(_serialize(updated))
 
 
@@ -171,6 +193,10 @@ def delete_product(id: int):
     res = coll.delete_one({"id": int(id)})
     if res.deleted_count == 0:
         return jsonify(message="produto não encontrado"), 404
+    
+    # Invalida cache do produto deletado
+    invalidate_product_cache(int(id))
+    
     return jsonify(message="produto excluído"), 200
 
 
@@ -359,24 +385,73 @@ def get_products_by_category(categoria: str):
         return jsonify(message="banco de dados indisponível"), 503
 
     coll = get_collection(db)
+
+    categoria = request.args.get("categoria")
+    q = request.args.get("q")
     
-    page = max(int(request.args.get("page", 1) or 1), 1)
-    page_size = min(max(int(request.args.get("page_size", 20) or 20), 1), 100)
+    # Tratamento seguro dos parâmetros de paginação
+    try:
+        page = max(int(request.args.get("page", 1) or 1), 1)
+    except (ValueError, TypeError):
+        page = 1
+    
+    try:
+        page_size = min(max(int(request.args.get("page_size", 10) or 10), 1), 100)
+    except (ValueError, TypeError):
+        page_size = 10
 
-    query = {"categoria": categoria}
-    cursor = coll.find(query).sort("titulo", 1)
-    total = coll.count_documents(query)
+    query: Dict[str, Any] = {}
+    if categoria:
+        query["categoria"] = categoria
+    if q:
+        query["$text"] = {"$search": q}
 
-    items = [
-        _serialize(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
+    # Projeção para retornar apenas campos necessários
+    projection = {
+        "_id": 0,
+        "id": 1,
+        "titulo": 1,
+        "preco": 1,
+        "descricao": 1,
+        "categoria": 1,
+        "imagem": 1,
+        "status": 1,
+    }
+
+    # Usa aggregation com $facet para obter items e total em uma única query
+    skip = (page - 1) * page_size
+    
+    pipeline = [
+        {"$match": query},
     ]
+    
+    # Adiciona sort por score se for busca textual
+    if q:
+        pipeline.append({"$sort": {"score": {"$meta": "textScore"}}})
+    
+    pipeline.append({
+        "$facet": {
+            "items": [
+                {"$skip": skip},
+                {"$limit": page_size},
+                {"$project": projection}
+            ],
+            "total": [{"$count": "count"}]
+        }
+    })
 
-    if not items:
-        return jsonify(message="nenhum produto encontrado para essa categoria"), 404
+    result = list(coll.aggregate(pipeline))
+    
+    if result:
+        items = result[0].get("items", [])
+        total_arr = result[0].get("total", [])
+        total = total_arr[0]["count"] if total_arr else 0
+    else:
+        items = []
+        total = 0
 
     return jsonify(
         items=items,
-        categoria=categoria,
         pagination={
             "page": page,
             "page_size": page_size,

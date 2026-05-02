@@ -5,6 +5,7 @@ from typing import Any, Dict
 import time
 import secrets
 from datetime import datetime, timedelta
+import logging
 
 from ..models.user_model import (
     get_collection,
@@ -18,8 +19,25 @@ from ..models.user_model import (
     USER_TYPES,
 )
 from ..services.email_service import send_confirmation_email, send_welcome_email, send_password_reset_email, send_account_deletion_code
-from ..services.jwt_service import create_access_token, create_refresh_token, refresh_access_token, JWT_ACCESS_TOKEN_EXPIRES
+from ..services.jwt_service import create_access_token, create_refresh_token, jwt_required
+from ..utils.validators import (
+    sanitize_email,
+    sanitize_string,
+    sanitize_integer,
+    sanitize_pagination,
+    validate_password_strength,
+    prevent_nosql_injection
+)
+from ..utils.decorators import (
+    rate_limit,
+    validate_json,
+    log_request,
+    handle_errors,
+    admin_required
+)
 import random
+
+logger = logging.getLogger(__name__)
 
 
 def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -29,6 +47,9 @@ def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
     return normalize_user(doc)
 
 
+@jwt_required
+@admin_required
+@handle_errors
 def list_users():
     """Lista usuários com paginação e filtros."""
     db = current_app.db
@@ -38,9 +59,11 @@ def list_users():
     coll = get_collection(db)
 
     try:
-        # Parâmetros de paginação
-        page = int(request.args.get("page", 1))
-        page_size = int(request.args.get("page_size", 20))
+        # Parâmetros de paginação sanitizados
+        page, page_size = sanitize_pagination(
+            request.args.get("page", 1),
+            request.args.get("page_size", 20)
+        )
         
         # Parâmetros de filtro
         tipo = request.args.get("tipo")
@@ -57,10 +80,15 @@ def list_users():
             filter_query["ativo"] = ativo.lower() == "true"
         
         if search:
+            # Sanitiza termo de busca
+            search = sanitize_string(search, max_length=50)
             filter_query["$or"] = [
                 {"nome": {"$regex": search, "$options": "i"}},
                 {"email": {"$regex": search, "$options": "i"}}
             ]
+        
+        # Previne injeção NoSQL
+        filter_query = prevent_nosql_injection(filter_query)
 
         # Contagem total
         total = coll.count_documents(filter_query)
@@ -107,6 +135,10 @@ def get_user(id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@rate_limit("3 per minute")
+@validate_json('nome', 'email', 'senha')
+@log_request("CREATE_USER")
+@handle_errors
 def create_user():
     """Cria novo usuário."""
     db = current_app.db
@@ -115,18 +147,27 @@ def create_user():
 
     try:
         payload = request.get_json()
-        if not payload:
-            return jsonify(message="Payload JSON é obrigatório"), 400
 
-        # Valida payload
+        # Sanitiza dados
+        nome = sanitize_string(payload.get("nome"), max_length=100)
+        email = sanitize_email(payload.get("email"))
+        senha = payload.get("senha")
+        
+        # Valida senha forte
+        is_valid, error_msg = validate_password_strength(senha)
+        if not is_valid:
+            return jsonify(message=error_msg), 400
+        
+        # Valida payload completo
         is_valid, error_msg = validate_user_payload(payload)
         if not is_valid:
             return jsonify(message=error_msg), 400
 
         coll = get_collection(db)
 
-        # Verifica se email já existe
-        existing_user = coll.find_one({"email": payload["email"].strip().lower()})
+        # Previne injeção NoSQL
+        query = prevent_nosql_injection({"email": email})
+        existing_user = coll.find_one(query)
         if existing_user:
             return jsonify(message="Email já está em uso"), 409
 
@@ -271,6 +312,10 @@ def delete_user(id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@rate_limit("5 per minute")
+@validate_json('email', 'senha')
+@log_request("AUTH_LOGIN")
+@handle_errors
 def authenticate_user():
     """Autentica usuário com email e senha."""
     db = current_app.db
@@ -279,14 +324,13 @@ def authenticate_user():
 
     try:
         payload = request.get_json()
-        if not payload:
-            return jsonify(message="Payload JSON é obrigatório"), 400
-
-        email = payload.get("email")
+        
+        # Sanitiza entrada
+        email = sanitize_email(payload.get("email"))
         senha = payload.get("senha")
 
-        if not email or not senha:
-            return jsonify(message="Email e senha são obrigatórios"), 400
+        if not senha:
+            return jsonify(message="Senha é obrigatória"), 400
 
         coll = get_collection(db)
 
@@ -318,6 +362,9 @@ def authenticate_user():
             email=user['email']
         )
         refresh_token = create_refresh_token(user_id=user['id'])
+        
+        # Log de sucesso
+        logger.info(f"Login bem-sucedido para usuário {user['id']} ({email})")
 
         return jsonify({
             "message": "Autenticação realizada com sucesso",
@@ -325,7 +372,7 @@ def authenticate_user():
             "access_token": access_token,
             "refresh_token": refresh_token,
             "token_type": "Bearer",
-            "expires_in": int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds())
+            "expires_in": 86400  # 24 horas
         })
 
     except Exception as e:
@@ -360,6 +407,11 @@ def refresh_token_endpoint():
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@jwt_required
+@rate_limit("3 per hour")
+@validate_json('senha_atual', 'senha_nova')
+@log_request("CHANGE_PASSWORD")
+@handle_errors
 def change_password(id: int):
     """Altera senha do usuário."""
     db = current_app.db
@@ -368,8 +420,6 @@ def change_password(id: int):
 
     try:
         payload = request.get_json()
-        if not payload:
-            return jsonify(message="Payload JSON é obrigatório"), 400
 
         senha_atual = payload.get("senha_atual")
         senha_nova = payload.get("senha_nova")
@@ -388,11 +438,12 @@ def change_password(id: int):
         if not verify_password(senha_atual, user["senha_hash"]):
             return jsonify(message="Senha atual incorreta"), 400
 
-        # Valida nova senha
-        from ..models.user_model import validate_password, hash_password
-        is_valid, error_msg = validate_password(senha_nova)
+        # Valida nova senha com validação forte
+        is_valid, error_msg = validate_password_strength(senha_nova)
         if not is_valid:
             return jsonify(message=error_msg), 400
+        
+        from ..models.user_model import hash_password
 
         # Atualiza senha
         result = coll.update_one(
@@ -406,6 +457,7 @@ def change_password(id: int):
         if result.matched_count == 0:
             return jsonify(message="Usuário não encontrado"), 404
 
+        logger.info(f"Senha alterada com sucesso para usuário {id}")
         return jsonify(message="Senha alterada com sucesso")
 
     except Exception as e:

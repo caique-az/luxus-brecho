@@ -199,7 +199,12 @@ def create_app():
                 ensure_favorites_indexes(app.db)
                 ensure_cart_indexes(app.db)
                 ensure_order_indexes(app.db)
-                print("✅ Coleções e índices verificados")
+                
+                # Cria índices otimizados
+                from .utils.db_indexes import create_indexes
+                create_indexes(app.db)
+                
+                print("✅ Coleções e índices verificados e otimizados")
             except ImportError as e:
                 print(f"⚠️  Alguns modelos não foram encontrados: {e}")
                 
