@@ -31,8 +31,6 @@ from ..utils.decorators import (
     log_request,
     handle_errors,
 )
-import random
-
 logger = logging.getLogger(__name__)
 
 
@@ -741,8 +739,8 @@ def request_account_deletion():
         if not user:
             return jsonify(message="Usuário não encontrado"), 404
 
-        # Gera código de 6 dígitos
-        deletion_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        # Gera código de 6 dígitos criptograficamente seguro
+        deletion_code = f'{secrets.randbelow(1000000):06d}'
         
         # Define expiração (30 minutos)
         code_expiration = datetime.utcnow() + timedelta(minutes=30)
