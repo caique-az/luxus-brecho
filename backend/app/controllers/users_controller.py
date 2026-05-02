@@ -138,16 +138,18 @@ def create_user():
     try:
         payload = request.get_json()
 
-        # Sanitiza dados
+        # Sanitiza dados e propaga para o payload
         nome = sanitize_string(payload.get("nome"), max_length=100)
         email = sanitize_email(payload.get("email"))
         senha = payload.get("senha")
-        
+        payload['nome'] = nome
+        payload['email'] = email
+
         # Valida senha forte
         is_valid, error_msg = validate_password_strength(senha)
         if not is_valid:
             return jsonify(message=error_msg), 400
-        
+
         # Valida payload completo
         is_valid, error_msg = validate_user_payload(payload)
         if not is_valid:
