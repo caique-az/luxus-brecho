@@ -299,5 +299,5 @@ def refresh_access_token(refresh_token: str, db) -> Tuple[bool, Optional[Dict[st
         'access_token': new_access_token,
         'refresh_token': new_refresh_token,
         'token_type': 'Bearer',
-        'expires_in': int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds())
+        'expires_in': int(_get_config()['access_expires'].total_seconds())
     }, None

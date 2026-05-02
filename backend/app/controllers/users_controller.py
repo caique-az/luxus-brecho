@@ -18,7 +18,7 @@ from ..models.user_model import (
     USER_TYPES,
 )
 from ..services.email_service import send_confirmation_email, send_welcome_email, send_password_reset_email, send_account_deletion_code
-from ..services.jwt_service import create_access_token, create_refresh_token, jwt_required, admin_required
+from ..services.jwt_service import create_access_token, create_refresh_token, jwt_required, admin_required, refresh_access_token
 from ..utils.validators import (
     sanitize_email,
     sanitize_string,
