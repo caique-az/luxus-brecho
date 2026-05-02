@@ -17,7 +17,6 @@ from ..services.cache_service import (
     cache_product,
     get_cached_product,
     invalidate_product_cache,
-    cache_result
 )
 
 
