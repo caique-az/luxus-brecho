@@ -210,9 +210,15 @@ def update_user(id: int):
         return jsonify(message="banco de dados indisponível"), 503
 
     try:
+        from flask import g
         payload = request.get_json()
         if not payload:
             return jsonify(message="Payload JSON é obrigatório"), 400
+
+        # Apenas admins podem alterar tipo e status — remove esses campos para não-admins
+        if g.user_type != 'Administrador':
+            payload.pop('tipo', None)
+            payload.pop('ativo', None)
 
         # Valida payload para atualização
         is_valid, error_msg = validate_user_payload(payload, is_update=True)
