@@ -1,6 +1,5 @@
 from flask import request, jsonify, current_app
 from pymongo.errors import DuplicateKeyError
-from bson import ObjectId
 from typing import Any, Dict
 import time
 import secrets
@@ -23,7 +22,6 @@ from ..services.jwt_service import create_access_token, create_refresh_token, jw
 from ..utils.validators import (
     sanitize_email,
     sanitize_string,
-    sanitize_integer,
     sanitize_pagination,
     validate_password_strength,
     prevent_nosql_injection
