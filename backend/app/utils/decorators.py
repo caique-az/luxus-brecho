@@ -91,19 +91,3 @@ def handle_errors(f):
     return decorated_function
 
 
-def cache_response(timeout=300, key_prefix='view'):
-    """
-    Decorator para cachear respostas.
-    
-    Args:
-        timeout: Tempo de cache em segundos
-        key_prefix: Prefixo para a chave de cache
-    """
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            # Por enquanto, apenas retorna a função original
-            # TODO: Implementar cache com Redis quando disponível
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator

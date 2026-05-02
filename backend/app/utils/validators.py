@@ -2,9 +2,7 @@
 Validadores e sanitizadores para entrada de dados.
 """
 import re
-from typing import Any, Dict, List, Tuple
-from bson import ObjectId
-from pymongo.collection import Collection
+from typing import Any, Dict, Tuple
 
 
 def sanitize_string(value: Any, max_length: int = 500) -> str:
@@ -93,34 +91,6 @@ def sanitize_integer(value: Any, min_val: int = None, max_val: int = None) -> in
     return value
 
 
-def sanitize_float(value: Any, min_val: float = None, max_val: float = None) -> float:
-    """
-    Sanitiza e valida float.
-    
-    Args:
-        value: Valor a ser convertido
-        min_val: Valor mínimo permitido
-        max_val: Valor máximo permitido
-        
-    Returns:
-        Float validado
-        
-    Raises:
-        ValueError: Se valor for inválido
-    """
-    try:
-        value = float(value)
-    except (TypeError, ValueError):
-        raise ValueError("Valor deve ser um número")
-    
-    if min_val is not None and value < min_val:
-        raise ValueError(f"Valor deve ser maior ou igual a {min_val}")
-    
-    if max_val is not None and value > max_val:
-        raise ValueError(f"Valor deve ser menor ou igual a {max_val}")
-    
-    return value
-
 
 def sanitize_pagination(page: Any, page_size: Any) -> Tuple[int, int]:
     """
@@ -145,65 +115,6 @@ def sanitize_pagination(page: Any, page_size: Any) -> Tuple[int, int]:
     
     return page, page_size
 
-
-def sanitize_object_id(value: Any) -> str:
-    """
-    Sanitiza e valida ObjectId do MongoDB.
-    
-    Args:
-        value: Valor a ser validado
-        
-    Returns:
-        String do ObjectId válido
-        
-    Raises:
-        ValueError: Se ObjectId for inválido
-    """
-    if isinstance(value, ObjectId):
-        return str(value)
-    
-    try:
-        # Tenta criar ObjectId para validar
-        obj_id = ObjectId(value)
-        return str(obj_id)
-    except Exception:
-        raise ValueError("ID inválido")
-
-
-def sanitize_query_params(params: Dict[str, Any], allowed_fields: List[str]) -> Dict[str, Any]:
-    """
-    Sanitiza parâmetros de query removendo campos não permitidos.
-    
-    Args:
-        params: Dicionário de parâmetros
-        allowed_fields: Lista de campos permitidos
-        
-    Returns:
-        Dicionário sanitizado
-    """
-    sanitized = {}
-    
-    for field in allowed_fields:
-        if field in params:
-            value = params[field]
-            
-            # Sanitiza baseado no tipo
-            if isinstance(value, str):
-                sanitized[field] = sanitize_string(value)
-            elif isinstance(value, (int, float)):
-                sanitized[field] = value
-            elif isinstance(value, bool):
-                sanitized[field] = value
-            elif isinstance(value, list):
-                # Sanitiza cada item da lista
-                sanitized[field] = [
-                    sanitize_string(item) if isinstance(item, str) else item
-                    for item in value
-                ]
-            elif value is not None:
-                sanitized[field] = sanitize_string(str(value))
-    
-    return sanitized
 
 
 def validate_password_strength(password: str) -> Tuple[bool, str]:
@@ -247,95 +158,6 @@ def validate_password_strength(password: str) -> Tuple[bool, str]:
     
     return True, ""
 
-
-def validate_cep(cep: str) -> Tuple[bool, str]:
-    """
-    Valida CEP brasileiro.
-    
-    Args:
-        cep: CEP a ser validado
-        
-    Returns:
-        Tupla (válido, cep_formatado)
-    """
-    if not cep:
-        return False, ""
-    
-    # Remove caracteres não numéricos
-    cep = re.sub(r'\D', '', cep)
-    
-    # Verifica tamanho
-    if len(cep) != 8:
-        return False, ""
-    
-    # Formata CEP
-    formatted = f"{cep[:5]}-{cep[5:]}"
-    
-    return True, formatted
-
-
-def validate_cpf(cpf: str) -> bool:
-    """
-    Valida CPF brasileiro.
-    
-    Args:
-        cpf: CPF a ser validado
-        
-    Returns:
-        True se válido, False caso contrário
-    """
-    # Remove caracteres não numéricos
-    cpf = re.sub(r'\D', '', cpf)
-    
-    # Verifica tamanho
-    if len(cpf) != 11:
-        return False
-    
-    # Verifica se todos os dígitos são iguais
-    if cpf == cpf[0] * 11:
-        return False
-    
-    # Calcula primeiro dígito verificador
-    sum_digit = sum(int(cpf[i]) * (10 - i) for i in range(9))
-    digit1 = (sum_digit * 10 % 11) % 10
-    
-    if digit1 != int(cpf[9]):
-        return False
-    
-    # Calcula segundo dígito verificador
-    sum_digit = sum(int(cpf[i]) * (11 - i) for i in range(10))
-    digit2 = (sum_digit * 10 % 11) % 10
-    
-    return digit2 == int(cpf[10])
-
-
-def validate_phone(phone: str) -> Tuple[bool, str]:
-    """
-    Valida telefone brasileiro.
-    
-    Args:
-        phone: Telefone a ser validado
-        
-    Returns:
-        Tupla (válido, telefone_formatado)
-    """
-    if not phone:
-        return False, ""
-    
-    # Remove caracteres não numéricos
-    phone = re.sub(r'\D', '', phone)
-    
-    # Verifica tamanho (com ou sem DDD)
-    if len(phone) < 10 or len(phone) > 11:
-        return False, ""
-    
-    # Formata telefone
-    if len(phone) == 11:
-        formatted = f"({phone[:2]}) {phone[2:7]}-{phone[7:]}"
-    else:
-        formatted = f"({phone[:2]}) {phone[2:6]}-{phone[6:]}"
-    
-    return True, formatted
 
 
 def prevent_nosql_injection(query: Dict[str, Any]) -> Dict[str, Any]:
