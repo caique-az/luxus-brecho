@@ -150,8 +150,22 @@ def resend_confirmation_endpoint():
 
 # Rotas de informações
 users_bp.route("/types", methods=["GET"])(get_user_types)
-users_bp.route("/summary", methods=["GET"])(get_users_summary)
 
-# Rotas de exclusão de conta
-users_bp.route("/request-deletion", methods=["POST"])(request_account_deletion)
-users_bp.route("/confirm-deletion", methods=["POST"])(confirm_account_deletion)
+@users_bp.route("/summary", methods=["GET"])
+@admin_required
+def get_users_summary_endpoint():
+    """Resumo de usuários - apenas admin."""
+    return get_users_summary()
+
+# Rotas de exclusão de conta (requerem autenticação)
+@users_bp.route("/request-deletion", methods=["POST"])
+@jwt_required
+def request_deletion_endpoint():
+    """Solicita exclusão da própria conta."""
+    return request_account_deletion()
+
+@users_bp.route("/confirm-deletion", methods=["POST"])
+@jwt_required
+def confirm_deletion_endpoint():
+    """Confirma exclusão da própria conta."""
+    return confirm_account_deletion()

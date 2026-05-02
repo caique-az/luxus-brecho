@@ -726,18 +726,13 @@ def reset_password():
 
 def request_account_deletion():
     """Solicita exclusão de conta - envia código de 6 dígitos por email."""
+    from flask import g
     db = current_app.db
     if db is None:
         return jsonify(message="banco de dados indisponível"), 503
 
     try:
-        payload = request.get_json()
-        if not payload:
-            return jsonify(message="Payload JSON é obrigatório"), 400
-
-        user_id = payload.get("user_id")
-        if not user_id:
-            return jsonify(message="ID do usuário é obrigatório"), 400
+        user_id = g.user_id
 
         coll = get_collection(db)
 
@@ -754,7 +749,7 @@ def request_account_deletion():
 
         # Salva código no banco
         coll.update_one(
-            {"id": int(user_id)},
+            {"id": user_id},
             {"$set": {
                 "deletion_code": deletion_code,
                 "deletion_code_expiration": code_expiration,
@@ -782,6 +777,7 @@ def request_account_deletion():
 
 def confirm_account_deletion():
     """Confirma exclusão de conta com código de 6 dígitos."""
+    from flask import g
     db = current_app.db
     if db is None:
         return jsonify(message="banco de dados indisponível"), 503
@@ -791,11 +787,11 @@ def confirm_account_deletion():
         if not payload:
             return jsonify(message="Payload JSON é obrigatório"), 400
 
-        user_id = payload.get("user_id")
+        user_id = g.user_id
         code = payload.get("code")
 
-        if not user_id or not code:
-            return jsonify(message="ID do usuário e código são obrigatórios"), 400
+        if not code:
+            return jsonify(message="Código é obrigatório"), 400
 
         coll = get_collection(db)
 
@@ -812,7 +808,7 @@ def confirm_account_deletion():
         if user.get("deletion_code_expiration") and user["deletion_code_expiration"] < datetime.utcnow():
             # Limpa código expirado
             coll.update_one(
-                {"id": int(user_id)},
+                {"id": user_id},
                 {"$unset": {"deletion_code": "", "deletion_code_expiration": ""}}
             )
             return jsonify(message="Código expirado. Solicite um novo código."), 410
@@ -822,7 +818,7 @@ def confirm_account_deletion():
             return jsonify(message="Código inválido"), 400
 
         # Exclui a conta permanentemente
-        result = coll.delete_one({"id": int(user_id)})
+        result = coll.delete_one({"id": user_id})
 
         if result.deleted_count == 0:
             return jsonify(message="Erro ao excluir conta"), 500
