@@ -29,34 +29,7 @@ def sanitize_string(value: Any, max_length: int = 500) -> str:
     
     # Limita tamanho
     value = value[:max_length]
-    
-    # Remove operadores MongoDB perigosos
-    dangerous_patterns = [
-        r'\$where',
-        r'\$regex', 
-        r'\$ne',
-        r'\$gt',
-        r'\$lt',
-        r'\$gte',
-        r'\$lte',
-        r'\$in',
-        r'\$nin',
-        r'\$or',
-        r'\$and',
-        r'\$not',
-        r'\$nor',
-        r'\$exists',
-        r'\$type',
-        r'\$expr',
-        r'\$jsonSchema',
-        r'\$mod',
-        r'\$text',
-        r'\$where'
-    ]
-    
-    for pattern in dangerous_patterns:
-        value = re.sub(pattern, '', value, flags=re.IGNORECASE)
-    
+
     return value
 
 
