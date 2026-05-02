@@ -7,6 +7,7 @@ import time
 from functools import wraps
 
 from ..services.jwt_service import jwt_optional, admin_required
+from ..services.cache_service import get_cached_product, cache_product, invalidate_product_cache
 
 class ProductQuerySchema(Schema):
     page = fields.Integer(load_default=1, validate=lambda x: 1 <= x <= 1000)
@@ -88,17 +89,23 @@ def list_products():
 @products_bp.route('/<int:id>', methods=['GET'])
 def get_product(id: int):
     """Get a single product by ID"""
+    cached = get_cached_product(id)
+    if cached is not None:
+        return jsonify(cached)
+
     db = current_app.db
     if db is None:
         return jsonify(message="banco de dados indisponível"), 503
-    
+
     coll = get_collection(db)
     doc = coll.find_one({"id": int(id)})
-    
+
     if not doc:
         return jsonify(message="produto não encontrado"), 404
-    
-    return jsonify(_serialize(doc))
+
+    serialized = _serialize(doc)
+    cache_product(id, serialized)
+    return jsonify(serialized)
 
 @products_bp.route('/', methods=['POST'])
 @admin_required
@@ -152,8 +159,9 @@ def update_product(id: int):
     merged["id"] = current["id"]
 
     coll.update_one({"id": int(id)}, {"$set": merged})
+    invalidate_product_cache(id)
     updated = coll.find_one({"id": int(id)})
-    
+
     return jsonify(_serialize(updated))
 
 @products_bp.route('/<int:id>', methods=['DELETE'])
@@ -182,7 +190,8 @@ def delete_product(id: int):
     res = coll.delete_one({"id": int(id)})
     if res.deleted_count == 0:
         return jsonify(message="erro ao excluir produto"), 500
-    
+
+    invalidate_product_cache(id)
     return jsonify(message="produto excluído"), 200
 
 @products_bp.route('/with-image', methods=['POST'])
