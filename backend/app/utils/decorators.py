@@ -21,16 +21,13 @@ def validate_json(*required_fields):
             json_data = request.get_json(silent=True)
             
             if not json_data:
-                return jsonify({'error': 'JSON é obrigatório'}), 400
-            
-            missing_fields = []
-            for field in required_fields:
-                if field not in json_data:
-                    missing_fields.append(field)
-            
+                return jsonify({'message': 'JSON é obrigatório'}), 400
+
+            missing_fields = [f for f in required_fields if f not in json_data]
+
             if missing_fields:
                 return jsonify({
-                    'error': 'Campos obrigatórios ausentes',
+                    'message': 'Campos obrigatórios ausentes',
                     'missing_fields': missing_fields
                 }), 400
             
@@ -49,13 +46,10 @@ def admin_required(f):
         user_type = getattr(g, 'user_type', None)
         
         if not user_type:
-            return jsonify({'error': 'Autenticação necessária'}), 401
-        
+            return jsonify({'message': 'Autenticação necessária'}), 401
+
         if user_type != 'Administrador':
-            return jsonify({
-                'error': 'Acesso negado',
-                'message': 'Apenas administradores podem acessar este recurso'
-            }), 403
+            return jsonify({'message': 'Acesso negado. Apenas administradores podem acessar este recurso'}), 403
         
         return f(*args, **kwargs)
     return decorated_function
@@ -98,22 +92,20 @@ def handle_errors(f):
             return f(*args, **kwargs)
         except ValueError as e:
             logger.warning(f"Erro de validação em {request.path}: {e}")
-            return jsonify({'error': str(e)}), 400
+            return jsonify({'message': str(e)}), 400
         except KeyError as e:
             logger.warning(f"Campo ausente em {request.path}: {e}")
-            return jsonify({'error': f'Campo obrigatório ausente: {e}'}), 400
+            return jsonify({'message': f'Campo obrigatório ausente: {e}'}), 400
         except Exception as e:
             logger.error(f"Erro não tratado em {request.path}: {e}", exc_info=True)
-            
-            # Em produção, não expor detalhes do erro
             if current_app.config.get('DEBUG'):
                 return jsonify({
-                    'error': 'Erro interno do servidor',
+                    'message': 'Erro interno do servidor',
                     'details': str(e)
                 }), 500
             else:
-                return jsonify({'error': 'Erro interno do servidor'}), 500
-    
+                return jsonify({'message': 'Erro interno do servidor'}), 500
+
     return decorated_function
 
 
