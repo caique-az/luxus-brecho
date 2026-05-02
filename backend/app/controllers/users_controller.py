@@ -1,7 +1,6 @@
 from flask import request, jsonify, current_app
 from pymongo.errors import DuplicateKeyError
 from typing import Any, Dict
-import time
 import secrets
 from datetime import datetime, timedelta
 import logging

@@ -5,8 +5,7 @@ Gerencia criação, validação e refresh de tokens.
 import os
 import jwt
 import hashlib
-import hmac
-from datetime import datetime, timedelta, timezone
+from datetime datetime, timedelta, timezone
 from typing import Optional, Dict, Any, Tuple
 from functools import wraps
 from flask import request, jsonify, g, current_app
