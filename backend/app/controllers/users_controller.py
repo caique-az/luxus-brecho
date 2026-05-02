@@ -41,8 +41,6 @@ def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
     return normalize_user(doc)
 
 
-@jwt_required
-@admin_required
 @handle_errors
 def list_users():
     """Lista usuários com paginação e filtros."""
@@ -398,7 +396,6 @@ def refresh_token_endpoint():
         return jsonify(message="Erro interno do servidor"), 500
 
 
-@jwt_required
 @validate_json('senha_atual', 'senha_nova')
 @log_request("CHANGE_PASSWORD")
 @handle_errors
@@ -432,8 +429,6 @@ def change_password(id: int):
         is_valid, error_msg = validate_password_strength(senha_nova)
         if not is_valid:
             return jsonify(message=error_msg), 400
-        
-        from ..models.user_model import hash_password
 
         # Atualiza senha
         result = coll.update_one(
