@@ -164,14 +164,11 @@ def validate_user_payload(payload: Dict[str, Any], is_update: bool = False) -> T
     Returns:
         (is_valid, error_message)
     """
-    required_fields = ["nome", "email", "tipo"]
     if not is_update:
-        required_fields.append("senha")
-    
-    # Verifica campos obrigatórios
-    for field in required_fields:
-        if field not in payload or not payload[field]:
-            return False, f"Campo '{field}' é obrigatório"
+        required_fields = ["nome", "email", "tipo", "senha"]
+        for field in required_fields:
+            if field not in payload or not payload[field]:
+                return False, f"Campo '{field}' é obrigatório"
     
     # Valida nome
     if "nome" in payload:
