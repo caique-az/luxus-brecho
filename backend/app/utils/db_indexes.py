@@ -146,10 +146,7 @@ def create_cart_indexes(db):
     # Índice para items.product_id (busca rápida de produtos no carrinho)
     coll.create_index([("items.product_id", ASCENDING)], name="idx_cart_products")
     
-    # Índice para data de atualização (limpeza de carrinhos antigos)
-    coll.create_index([("updated_at", ASCENDING)], name="idx_cart_updated")
-    
-    # TTL index para remover carrinhos abandonados após 30 dias
+    # TTL index para remover carrinhos abandonados após 30 dias (serve também para ordenação)
     coll.create_index(
         [("updated_at", ASCENDING)], 
         expireAfterSeconds=2592000,  # 30 dias
