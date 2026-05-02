@@ -7,7 +7,6 @@ Modelo e utilidades para a coleção de usuários.
 - Gerencia confirmação de email
 """
 from typing import Dict, Any, Tuple, Optional
-from pymongo import ASCENDING, TEXT
 from pymongo.collection import ReturnDocument
 import bcrypt
 import re
@@ -315,25 +314,7 @@ def ensure_users_collection(db):
         db.command("collMod", COLLECTION_NAME, validator=schema)
         print(f"✅ Schema de validação aplicado à coleção '{COLLECTION_NAME}'")
         
-        # Cria índices
-        collection = get_collection(db)
-        
-        # Índice único para ID
-        collection.create_index([("id", ASCENDING)], unique=True)
-        
-        # Índice único para email
-        collection.create_index([("email", ASCENDING)], unique=True)
-        
-        # Índice para tipo de usuário
-        collection.create_index([("tipo", ASCENDING)])
-        
-        # Índice para status ativo
-        collection.create_index([("ativo", ASCENDING)])
-        
-        # Índice para busca por nome
-        collection.create_index([("nome", TEXT)])
-        
-        print(f"✅ Índices criados para a coleção '{COLLECTION_NAME}'")
+        print(f"✅ Schema configurado para a coleção '{COLLECTION_NAME}'")
         
     except Exception as e:
         print(f"❌ Erro ao configurar coleção de usuários: {e}")

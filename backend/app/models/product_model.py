@@ -5,7 +5,7 @@ Modelo e utilidades para a coleção de produtos.
 - Garante validator e índices no MongoDB
 """
 from typing import Dict, Any, Tuple
-from pymongo import ASCENDING, TEXT
+from pymongo import ASCENDING
 from pymongo.collection import ReturnDocument
 
 COLLECTION_NAME = "products"
@@ -203,25 +203,7 @@ def ensure_products_collection(db):
     except Exception as e:
         print(f"Erro ao preparar counters: {e}")
 
-    coll = db[COLLECTION_NAME]
-
-    # Índices
-    try:
-        coll.create_index([("id", ASCENDING)], unique=True, name="uniq_id")
-    except Exception as e:
-        print(f"Erro ao criar índice único em 'id': {e}")
-
-    try:
-        coll.create_index([("categoria", ASCENDING)], name="idx_categoria")
-    except Exception as e:
-        print(f"Erro ao criar índice em 'categoria': {e}")
-
-    try:
-        coll.create_index([("titulo", TEXT), ("descricao", TEXT)], name="txt_titulo_descricao")
-    except Exception as e:
-        print(f"Erro ao criar índice de texto: {e}")
-
-    return coll
+    return db[COLLECTION_NAME]
 
 
 def ensure_counters_collection(db):

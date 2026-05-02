@@ -38,7 +38,6 @@ def create_indexes(db):
         
     except Exception as e:
         logger.error(f"❌ Erro ao criar índices: {e}")
-        raise
 
 
 def create_product_indexes(db):
