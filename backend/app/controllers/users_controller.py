@@ -80,15 +80,12 @@ def list_users():
             filter_query["ativo"] = ativo.lower() == "true"
         
         if search:
-            # Sanitiza termo de busca
+            # Sanitiza o valor do termo de busca antes de usá-lo na query
             search = sanitize_string(search, max_length=50)
             filter_query["$or"] = [
                 {"nome": {"$regex": search, "$options": "i"}},
                 {"email": {"$regex": search, "$options": "i"}}
             ]
-        
-        # Previne injeção NoSQL
-        filter_query = prevent_nosql_injection(filter_query)
 
         # Contagem total
         total = coll.count_documents(filter_query)
