@@ -135,6 +135,9 @@ def create_user():
     try:
         payload = request.get_json()
 
+        # Endpoint público só cria clientes — tipo é sempre forçado
+        payload['tipo'] = 'Cliente'
+
         # Sanitiza dados e propaga para o payload
         nome = sanitize_string(payload.get("nome"), max_length=100)
         email = sanitize_email(payload.get("email"))
