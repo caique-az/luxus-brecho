@@ -25,7 +25,7 @@ def _get_config():
             'access_expires': cfg.JWT_ACCESS_TOKEN_EXPIRES,
             'refresh_expires': cfg.JWT_REFRESH_TOKEN_EXPIRES
         }
-    except:
+    except Exception:
         # Fallback apenas para desenvolvimento
         if os.environ.get('FLASK_DEBUG', 'False').lower() == 'true':
             return {
