@@ -335,43 +335,5 @@ def ensure_users_collection(db):
         
         print(f"✅ Índices criados para a coleção '{COLLECTION_NAME}'")
         
-        # Cria usuário administrador padrão se não existir
-        create_default_admin(db)
-        
     except Exception as e:
         print(f"❌ Erro ao configurar coleção de usuários: {e}")
-
-def create_default_admin(db):
-    """Cria usuário administrador padrão se não existir."""
-    try:
-        collection = get_collection(db)
-        
-        # Verifica se já existe um administrador
-        admin_exists = collection.find_one({"tipo": "Administrador"})
-        if admin_exists:
-            return
-        
-        # Cria administrador padrão
-        admin_data = {
-            "nome": "Jow",
-            "email": "contatojmfr@gmail.com",
-            "senha": "senha123",  # Senha padrão - deve ser alterada
-            "tipo": "Administrador"
-        }
-        
-        # Valida e prepara dados
-        is_valid, error = validate_user_payload(admin_data)
-        if not is_valid:
-            print(f"❌ Erro ao validar administrador padrão: {error}")
-            return
-        
-        user_data = prepare_new_user(admin_data, db)
-        collection.insert_one(user_data)
-        
-        print("✅ Usuário administrador padrão criado:")
-        print("   Email: admin@luxusbrecho.com")
-        print("   Senha: admin123")
-        print("   ⚠️  ALTERE A SENHA PADRÃO IMEDIATAMENTE!")
-        
-    except Exception as e:
-        print(f"❌ Erro ao criar administrador padrão: {e}")
