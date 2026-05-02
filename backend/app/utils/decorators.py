@@ -87,40 +87,6 @@ def log_request(action):
     return decorator
 
 
-def sanitize_input(f):
-    """
-    Decorator para sanitizar automaticamente input JSON.
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if request.method in ['POST', 'PUT', 'PATCH']:
-            json_data = request.get_json(silent=True)
-            
-            if json_data:
-                from ..utils.validators import sanitize_string
-                
-                # Sanitiza strings no JSON
-                def sanitize_dict(d):
-                    for key, value in d.items():
-                        if isinstance(value, str):
-                            d[key] = sanitize_string(value)
-                        elif isinstance(value, dict):
-                            sanitize_dict(value)
-                        elif isinstance(value, list):
-                            for i, item in enumerate(value):
-                                if isinstance(item, str):
-                                    value[i] = sanitize_string(item)
-                                elif isinstance(item, dict):
-                                    sanitize_dict(item)
-                
-                sanitize_dict(json_data)
-                
-                # Atualiza o JSON sanitizado
-                request._cached_json = (json_data, json_data)
-        
-        return f(*args, **kwargs)
-    return decorated_function
-
 
 def handle_errors(f):
     """
