@@ -13,17 +13,17 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "resolveJsonModule": true,
+    "ignoreDeprecations": "6.0",      // ← silences baseUrl + moduleResolution warnings
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     }
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
     "nativewind-env.d.ts",
-    "network-config.json"
+    "network-config.json",
+    "declarations.d.ts"               // ← add this
   ]
 }

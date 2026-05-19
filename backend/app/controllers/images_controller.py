@@ -7,7 +7,7 @@ from werkzeug.datastructures import FileStorage
 from app.services.supabase_storage import storage_service
 from typing import Tuple, Any
 
-def upload_product_image() -> Tuple[Any, int]:
+def upload_product_image():
     """
     Upload de imagem para um produto
     POST /api/images/upload
@@ -51,7 +51,7 @@ def upload_product_image() -> Tuple[Any, int]:
         current_app.logger.error(f"Erro no upload de imagem: {e}")
         return jsonify({"error": "Erro interno no servidor"}), 500
 
-def delete_product_image() -> Tuple[Any, int]:
+def delete_product_image():
     """
     Deleta uma imagem de produto
     DELETE /api/images/delete
@@ -79,7 +79,7 @@ def delete_product_image() -> Tuple[Any, int]:
         current_app.logger.error(f"Erro ao deletar imagem: {e}")
         return jsonify({"error": "Erro interno no servidor"}), 500
 
-def list_product_images(product_id: int) -> Tuple[Any, int]:
+def list_product_images(product_id: int):
     """
     Lista todas as imagens de um produto
     GET /api/images/product/<product_id>
@@ -105,7 +105,7 @@ def list_product_images(product_id: int) -> Tuple[Any, int]:
         current_app.logger.error(f"Erro ao listar imagens: {e}")
         return jsonify({"error": "Erro interno no servidor"}), 500
 
-def get_image_info() -> Tuple[Any, int]:
+def get_image_info():
     """
     Obtém informações sobre uma imagem
     POST /api/images/info
@@ -131,7 +131,7 @@ def get_image_info() -> Tuple[Any, int]:
         current_app.logger.error(f"Erro ao obter info da imagem: {e}")
         return jsonify({"error": "Erro interno no servidor"}), 500
 
-def upload_multiple_images() -> Tuple[Any, int]:
+def upload_multiple_images():
     """
     Upload de múltiplas imagens para um produto
     POST /api/images/upload-multiple

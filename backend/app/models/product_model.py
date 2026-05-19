@@ -63,7 +63,7 @@ def create_dynamic_schema(db) -> Dict[str, Any]:
                 },
                 "categoria": {
                     "bsonType": "string",
-                    "enum": allowed_categories,
+                    **({"enum": allowed_categories} if allowed_categories else {}),
                     "description": "Categoria do produto (obrigatório)"
                 },
                 "imagem": {

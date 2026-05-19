@@ -2,6 +2,7 @@
 Serviço de autenticação JWT.
 Gerencia criação, validação e refresh de tokens.
 """
+from __future__ import annotations
 import os
 import jwt
 from datetime import datetime, timedelta, timezone

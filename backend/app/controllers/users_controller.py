@@ -1,3 +1,4 @@
+from __future__ import annotations
 from flask import request, jsonify, current_app
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId

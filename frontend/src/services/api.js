@@ -37,7 +37,7 @@ api.interceptors.request.use(
     const authRoutes = ['/users/auth', '/users/refresh-token', '/users/forgot-password', '/users/reset-password'];
     const isAuthRoute = authRoutes.some(route => config.url?.includes(route));
     
-    if (!isAuthRoute || config.method?.toLowerCase() !== 'post') {
+    if (!isAuthRoute && config.method?.toLowerCase() !== 'post') {
       const token = authService.getAccessToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;

@@ -1,6 +1,5 @@
 import { Stack } from "expo-router";
 import { ToastProvider } from "../contexts/ToastContext";
-import "../global.css";
 
 export default function Layout() {
   return (
