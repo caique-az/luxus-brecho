@@ -146,24 +146,6 @@ export const logger = new Logger();
 if (__DEV__) {
   const originalConsoleError = console.error;
   console.error = (...args: unknown[]) => {
-    // Limitar tamanho dos argumentos para evitar "String length exceeds limit"
-    const truncatedArgs = args.map(arg => {
-      if (typeof arg === 'string' && arg.length > 500) {
-        return arg.substring(0, 500) + '... [truncated]';
-      }
-      if (typeof arg === 'object' && arg !== null) {
-        try {
-          const str = JSON.stringify(arg);
-          if (str.length > 500) {
-            return '[Object too large to log]';
-          }
-        } catch {
-          return '[Object - circular reference]';
-        }
-      }
-      return arg;
-    });
-    logger.error('Console Error', undefined, 'GLOBAL', { args: truncatedArgs });
     originalConsoleError.apply(console, args);
   };
 }

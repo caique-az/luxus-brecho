@@ -32,7 +32,7 @@ def create_access_token(user_id: int, user_type: str, email: str) -> str:
     """
     now = datetime.now(timezone.utc)
     payload = {
-        'sub': user_id,  # Subject (ID do usuário)
+        'sub': str(user_id),  # Subject (ID do usuário)
         'type': user_type,
         'email': email,
         'iat': now,  # Issued at
@@ -54,7 +54,7 @@ def create_refresh_token(user_id: int) -> str:
     """
     now = datetime.now(timezone.utc)
     payload = {
-        'sub': user_id,
+        'sub': str(user_id),
         'iat': now,
         'exp': now + JWT_REFRESH_TOKEN_EXPIRES,
         'token_type': 'refresh'

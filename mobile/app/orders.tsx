@@ -238,7 +238,7 @@ export default function OrdersScreen() {
 
         {!hasItems ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="bag-outline" size={64} color="#ccc" />
+            <Ionicons name="cart-outline" size={64} color="#ccc" />
             <Text style={styles.emptyTitle}>Seu carrinho está vazio</Text>
             <Text style={styles.emptyText}>
               Adicione produtos ao carrinho para vê-los aqui.
@@ -247,7 +247,7 @@ export default function OrdersScreen() {
               style={styles.shopButton}
               onPress={() => router.push('/(tabs)/products')}
             >
-              <Ionicons name="storefront-outline" size={20} color="white" />
+              <Ionicons name="shirt-outline" size={20} color="white" />
               <Text style={styles.shopButtonText}>Ver Produtos</Text>
             </TouchableOpacity>
           </View>

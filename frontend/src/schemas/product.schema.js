@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // Categorias fixas do sistema
-export const PRODUCT_CATEGORIES = ['Casual', 'Social', 'Esportivo'];
+export const PRODUCT_CATEGORIES = ['Casual', 'Social', 'Esportivo', 'Feminino', 'Masculino', 'Infantil'];
 
 // Schema para criação/edição de produto
 export const ProductSchema = z.object({
