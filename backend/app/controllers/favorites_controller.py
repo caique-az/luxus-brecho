@@ -8,7 +8,6 @@ Endpoints:
 """
 from flask import request, jsonify, current_app
 from typing import Any, Dict
-from functools import wraps
 
 from ..models.favorite_model import (
     add_favorite,
@@ -31,27 +30,12 @@ def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
     return d
 
 
-def require_auth(f):
-    """Decorator para exigir autenticação."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Pegar user_id do header de autenticação
-        user_id = request.headers.get('X-User-Id')
-        
-        if not user_id:
-            return jsonify(message="Autenticação necessária"), 401
-        
-        return f(user_id, *args, **kwargs)
-    
-    return decorated_function
-
-
-def list_user_favorites(user_id: str):
+def list_user_favorites(user_id: int):
     """
     Lista todos os favoritos do usuário com detalhes dos produtos.
     
     GET /favorites
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     
     Response:
     {
@@ -107,12 +91,12 @@ def list_user_favorites(user_id: str):
     ), 200
 
 
-def add_to_favorites(user_id: str):
+def add_to_favorites(user_id: int):
     """
     Adiciona um produto aos favoritos.
     
     POST /favorites
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     Body: { "product_id": 123 }
     
     Response:
@@ -157,12 +141,12 @@ def add_to_favorites(user_id: str):
     ), 201
 
 
-def remove_from_favorites(user_id: str, product_id: int):
+def remove_from_favorites(user_id: int, product_id: int):
     """
     Remove um produto dos favoritos.
     
     DELETE /favorites/<product_id>
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     
     Response:
     {
@@ -184,12 +168,12 @@ def remove_from_favorites(user_id: str, product_id: int):
     return jsonify(message="Produto removido dos favoritos"), 200
 
 
-def check_favorite(user_id: str, product_id: int):
+def check_favorite(user_id: int, product_id: int):
     """
     Verifica se um produto está nos favoritos.
     
     GET /favorites/check/<product_id>
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     
     Response:
     {
@@ -206,12 +190,12 @@ def check_favorite(user_id: str, product_id: int):
     return jsonify(is_favorited=favorited), 200
 
 
-def toggle_favorite(user_id: str):
+def toggle_favorite(user_id: int):
     """
     Alterna o estado de favorito (adiciona se não existe, remove se existe).
     
     POST /favorites/toggle
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     Body: { "product_id": 123 }
     
     Response:

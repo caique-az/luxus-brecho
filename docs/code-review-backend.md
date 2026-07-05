@@ -49,21 +49,21 @@ Prioridades:
 - **Problema:** nenhuma rota de carrinho aplica decorator de auth; o usuário é identificado só pelo `<int:user_id>` da URL.
 - **Impacto:** `GET /api/cart/42` lê o carrinho de qualquer um; `POST .../add`, `PUT .../update`, `DELETE .../clear` alteram carrinho alheio.
 - **Correção sugerida:** aplicar `@owner_or_admin_required('user_id')` (após corrigir o item 5) em todas as rotas de carrinho.
-- [ ] Corrigido
+- [x] Corrigido — posse em todas as 6 rotas
 
 ### 3. Rotas de pedido sem autenticação (IDOR + manipulação de estoque)
 - **Local:** `backend/app/routes/order_routes.py:16-43`
 - **Problema:** todas as rotas de pedido são públicas.
 - **Impacto:** criar pedido "confirmado" para qualquer `user_id` (marca produtos como `vendido`); `POST /api/orders/<id>/cancel` reverte vendas (`vendido` → `disponivel`, `order_controller.py:253-257`); `GET /api/orders/<id>` expõe endereço/PII do dono; `PUT /api/orders/<id>/status` permite marcar como `entregue`.
 - **Correção sugerida:** `@owner_or_admin_required('user_id')` nas rotas de usuário; `@admin_required` em `update_order_status`; ownership + `@jwt_required` em `get_order_by_id`/`cancel`.
-- [ ] Corrigido
+- [x] Corrigido — posse no controller para get/cancel
 
 ### 4. Favoritos autenticados por header falsificável
 - **Local:** `backend/app/controllers/favorites_controller.py:34-46`
 - **Problema:** `require_auth` lê `X-User-Id` em texto puro como identidade, sem validar JWT.
 - **Impacto:** `curl -H 'X-User-Id: 7' /api/favorites` lista/modifica favoritos de qualquer usuário. Contradiz a regra do CLAUDE.md: _"Auth via header `Authorization: Bearer <token>`"_.
 - **Correção sugerida:** remover `require_auth`; usar `@jwt_required` e ler a identidade de `g.user_id`.
-- [ ] Corrigido
+- [x] Corrigido — `require_auth` removido; `X-User-Id` fora do CORS
 
 ### 5. `owner_or_admin_required` nega o próprio dono (bug de tipo str vs int)
 - **Local:** `backend/app/services/jwt_service.py:224` (e origem em `:35`)
@@ -98,14 +98,14 @@ Prioridades:
 - **Problema:** `create/update/delete/activate` de categoria não têm gate de admin, ao contrário do CRUD de produtos (`products_routes.py:105`).
 - **Impacto:** anônimo cria/apaga categorias.
 - **Correção sugerida:** aplicar `@admin_required` nessas rotas.
-- [ ] Corrigido
+- [x] Corrigido — admin no CRUD; leitura pública mantida
 
 ### 10. Upload/delete de imagens sem autenticação
 - **Local:** `backend/app/routes/images_routes.py:17-23`
 - **Problema:** `upload`, `upload-multiple` e `delete` sem decorator de auth.
 - **Impacto:** anônimo envia arquivos arbitrários ao Supabase (abuso de storage/custo) ou remove imagens de produtos existentes.
 - **Correção sugerida:** `@admin_required` nas rotas de mutação de imagem.
-- [ ] Corrigido
+- [x] Corrigido — admin em upload/upload-multiple/delete
 
 ### 15. Privilégio obsoleto na claim do token
 - **Local:** `backend/app/services/jwt_service.py:177`

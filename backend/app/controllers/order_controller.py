@@ -1,7 +1,7 @@
 """
 Controller para gerenciamento de pedidos.
 """
-from flask import jsonify, request, current_app
+from flask import jsonify, request, current_app, g
 from datetime import datetime
 from typing import Dict, Any
 
@@ -13,6 +13,14 @@ from ..models.order_model import (
     ORDER_STATUS,
 )
 from ..models.cart_model import get_collection as get_cart_collection
+
+
+def _forbidden_if_not_owner(order):
+    """Retorna uma resposta 403 se o solicitante não for o dono do pedido nem
+    admin; caso contrário, None. Requer g.user_id/g.user_type (jwt_required)."""
+    if g.user_type != "Administrador" and order.get("user_id") != g.user_id:
+        return jsonify(message="Acesso negado. Você não tem permissão para este pedido"), 403
+    return None
 
 
 def get_user_orders(user_id: int):
@@ -61,10 +69,14 @@ def get_order_by_id(order_id: int):
     try:
         coll = get_collection(db)
         order = coll.find_one({"id": order_id})
-        
+
         if not order:
             return jsonify(message="Pedido não encontrado"), 404
-        
+
+        denied = _forbidden_if_not_owner(order)
+        if denied:
+            return denied
+
         return jsonify(normalize_order(order))
 
     except Exception as e:
@@ -242,6 +254,10 @@ def cancel_order(order_id: int):
         order = coll.find_one({"id": order_id})
         if not order:
             return jsonify(message="Pedido não encontrado"), 404
+
+        denied = _forbidden_if_not_owner(order)
+        if denied:
+            return denied
 
         if order.get("status") == "cancelado":
             return jsonify(message="Pedido já está cancelado"), 400

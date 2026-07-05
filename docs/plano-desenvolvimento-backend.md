@@ -54,13 +54,13 @@ Cada fase é um bloco entregável e testável isoladamente. Faça **uma fase por
   2. Ler a identidade de `g.user_id` (não mais do parâmetro/header). Ajustar as assinaturas das funções do controller que hoje recebem `user_id` do header.
   3. Remover `'X-User-Id'` de `allow_headers` no CORS (`__init__.py:130`) — deixa de ser um header aceito.
 - **Critério de aceite:** requisição sem `Authorization` → 401; com token de A, só mexe nos favoritos de A.
-- [ ] Concluído
+- [x] Concluído
 
 ### 2.2 — Carrinho: aplicar posse em todas as rotas `[#2]`
 - **Arquivo:** `backend/app/routes/cart_routes.py:18-51`
 - **Passos:** aplicar `@owner_or_admin_required('user_id')` em `get`, `add`, `remove`, `update`, `clear`, `sync`. (Depende da Fase 1.1.)
 - **Critério de aceite:** `GET /api/cart/42` com token de outro usuário → 403; com token do 42 → 200.
-- [ ] Concluído
+- [x] Concluído
 
 ### 2.3 — Pedidos: posse nas rotas de usuário, admin no status `[#3]`
 - **Arquivo:** `backend/app/routes/order_routes.py:16-43`
@@ -69,19 +69,19 @@ Cada fase é um bloco entregável e testável isoladamente. Faça **uma fase por
   2. `@admin_required` em `update_order_status` (`/<int:order_id>/status`).
   3. `get_order_by_id` e `cancel_order` recebem `order_id`, não `user_id` — proteger com `@jwt_required` e validar posse dentro do controller (carregar o pedido, comparar `order['user_id']` com `g.user_id`, senão 403). Admin ignora a checagem.
 - **Critério de aceite:** anônimo não cria pedido; não-dono não vê/cancela pedido alheio; só admin altera status.
-- [ ] Concluído
+- [x] Concluído
 
 ### 2.4 — Categorias: exigir admin no CRUD `[#9]`
 - **Arquivo:** `backend/app/routes/categories_routes.py:17-22`
 - **Passos:** aplicar `@admin_required` em `create`, `update`, `delete`, `activate`. Manter `list`/`get`/`summary` públicos (leitura). Como as rotas usam o estilo `bp.route(...)(func)`, envolver com o decorator ou migrar para funções decoradas.
 - **Critério de aceite:** anônimo recebe 401/403 ao criar/apagar categoria.
-- [ ] Concluído
+- [x] Concluído
 
 ### 2.5 — Imagens: exigir admin nas mutações `[#10]`
 - **Arquivo:** `backend/app/routes/images_routes.py:17-23`
 - **Passos:** `@admin_required` em `upload`, `upload-multiple`, `delete`. Leitura (`list`, `info`) pode continuar pública.
 - **Critério de aceite:** anônimo não envia/apaga imagem no Supabase.
-- [ ] Concluído
+- [x] Concluído
 
 **Teste de fumaça da Fase 2:** para cada recurso, repetir o par (sem token → 401) e (token de outro usuário → 403).
 

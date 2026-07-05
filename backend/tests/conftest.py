@@ -324,6 +324,14 @@ def admin_headers(auth_headers):
 
 
 @pytest.fixture
+def user_headers(auth_headers):
+    """Headers de um cliente comum com id=1 — o dono dos recursos nos testes
+    (carrinho/pedidos/favoritos de user_id=1). Passa em @owner_or_admin_required
+    quando a URL referencia o usuário 1."""
+    return auth_headers(user_id=1, tipo="Cliente", email="user@test.com")
+
+
+@pytest.fixture
 def sample_user():
     """Retorna dados de usuário de exemplo."""
     return {

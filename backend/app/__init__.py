@@ -121,13 +121,12 @@ def create_app():
          resources={r"/*": {"origins": allowed_origins}},
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
          allow_headers=[
-             'Content-Type', 
+             'Content-Type',
              'Authorization',
              'Accept',
              'Accept-Encoding',
              'X-Client-Version',
              'X-Requested-With',
-             'X-User-Id',
              'Origin'
          ],
          expose_headers=['Content-Length', 'Content-Encoding'],
