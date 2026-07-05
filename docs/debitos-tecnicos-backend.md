@@ -17,6 +17,25 @@ sobrou.
 > fundo é passar a usar (ou criar) **uma única camada** para auth, resposta,
 > guarda de banco e serialização, em vez de reimplementar em cada função.
 
+## Status da implementação (jul/2026)
+
+Aplicada a fatia que **não muda o contrato observável consumido por frontend e
+mobile** (os clientes continuam funcionando), com a suíte `pytest` verde
+(100 passando). O que altera contrato de cliente ficou para PRs coordenados.
+
+| Item | Status | Observação |
+|------|--------|------------|
+| 1 — Autorização | 🟡 parcial | **Feito:** escrita de `categories` agora exige `@admin_required`. **Pendente:** JWT em `cart`/`orders`/`favorites` (quebra o mobile, que hoje nem tem JWT real — precisa de PR coordenado nos 3 apps). |
+| 2 — Envelope de resposta | 🔴 pendente | Muda o corpo consumido por frontend/mobile; exige varredura conjunta. Não iniciado. |
+| 3 — Boilerplate (`@require_db` + errorhandler) | 🟢 feito | Criado `@require_db` (`app/utils/decorators.py`) e `@app.errorhandler(Exception)` central. `try/except` genérico removido de `cart`/`orders`; **mantido** em `users`/`images` por serem fluxos sensíveis (o handler central já é a rede de segurança). |
+| 4 — Duplicação de infraestrutura | 🟢 feito | Extraídos `serialize_doc`, `next_sequence`, `get_pagination_params` e `_render_email` para `app/utils/`. `favorites` mantém `_id`→string (divergência do item 4 deixada para o PR do envelope). |
+
+> **Bloqueador do item 1 descoberto na implementação:** o app **mobile não usa
+> JWT real** — grava a string literal `'authenticated'` e nunca envia
+> `Authorization`. Exigir `@jwt_required` em cart/orders/favorites quebra o
+> mobile até um overhaul do auth dele. Por isso o núcleo do item 1 permanece
+> como PR coordenado, e não foi aplicado aqui.
+
 ---
 
 ## 1. Autorização inconsistente (⚠️ segurança — prioridade máxima)

@@ -41,8 +41,9 @@ Roteamento é o Expo Router: criar `app/nome.tsx` cria a rota `/nome`; `app/(tab
 
 ## Autenticação
 
-- Rotas de usuário e escrita de produtos usam **JWT** (`Authorization: Bearer`). Aplique os decorators existentes: `@jwt_required`, `@admin_required`, `@owner_or_admin_required('id')`.
-- Favoritos usam o header **`X-User-Id`** (decorator `require_auth` local do controller). Não misture os dois esquemas num mesmo recurso sem necessidade.
+- Rotas de usuário e escrita de produtos **e de categorias** usam **JWT** (`Authorization: Bearer`). Aplique os decorators existentes: `@jwt_required`, `@admin_required`, `@owner_or_admin_required('id')`.
+- Toda função de controller que acessa o banco deve usar o decorator **`@require_db`** (`app/utils/decorators.py`), que padroniza o 503 quando `current_app.db is None`. Não reimplemente a guarda `if db is None` à mão.
+- Favoritos ainda usam o header **`X-User-Id`** (decorator `require_auth` local do controller). Esse esquema é **forjável** e está marcado para migração ao JWT (ver [débitos técnicos](./debitos-tecnicos-backend.md), item 1). Não o use como referência para novos recursos — prefira os decorators JWT.
 - Nunca logue tokens nem senhas. `JWT_SECRET_KEY` e credenciais ficam em `.env` (nunca commitados).
 
 ## Testes

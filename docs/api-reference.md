@@ -13,7 +13,7 @@ Há dois esquemas, dependendo do recurso:
 
 | Esquema | Como enviar | Recursos |
 |---------|-------------|----------|
-| **JWT** | `Authorization: Bearer <access_token>` | Usuários, escrita de Produtos (admin) |
+| **JWT** | `Authorization: Bearer <access_token>` | Usuários, escrita de Produtos e Categorias (admin) |
 | **X-User-Id** | `X-User-Id: <user_id>` | Favoritos |
 
 Tokens são obtidos em `POST /api/users/auth`. O **access token** vale 24h; renove com o **refresh token** (30 dias) em `POST /api/users/refresh-token`.
@@ -129,14 +129,14 @@ Regras: `titulo` 2–100 chars; `preco` numérico ≥ 0; `categoria` precisa ser
 | GET | `/api/categories` | 🔓 | Lista categorias |
 | GET | `/api/categories/<id>` | 🔓 | Detalhe |
 | GET | `/api/categories/summary` | 🔓 | Resumo (ex.: contagem por categoria) |
-| POST | `/api/categories` | 🔓¹ | Cria categoria |
-| PUT | `/api/categories/<id>` | 🔓¹ | Atualiza categoria |
-| PUT | `/api/categories/<id>/activate` | 🔓¹ | Ativa categoria |
-| DELETE | `/api/categories/<id>` | 🔓¹ | Remove categoria |
+| POST | `/api/categories` | 👑 | Cria categoria |
+| PUT | `/api/categories/<id>` | 👑 | Atualiza categoria |
+| PUT | `/api/categories/<id>/activate` | 👑 | Ativa categoria |
+| DELETE | `/api/categories/<id>` | 👑 | Remove categoria |
 
 Campos: `id` (auto), `name`, `description`, `active`. As **categorias ativas** definem dinamicamente quais valores de `categoria` os produtos podem usar.
 
-> ¹ As rotas de escrita de categoria não aplicam decorator de auth atualmente. Trate como operação administrativa e proteja antes de expor em produção.
+> As rotas de escrita de categoria exigem **JWT de administrador** (`@admin_required`), mesmo critério do CRUD de produtos. A leitura permanece pública.
 
 ---
 
