@@ -12,7 +12,14 @@ from flask import request, jsonify, g, current_app
 
 
 # Configurações JWT
-JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'luxus-brecho-secret-key-change-in-production')
+# Sem fallback: um segredo hardcoded no repositório tornaria os tokens de admin
+# forjáveis. Falha rápido no startup se a variável de ambiente não estiver definida.
+JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY')
+if not JWT_SECRET_KEY:
+    raise RuntimeError(
+        'JWT_SECRET_KEY não está definida. Defina a variável de ambiente '
+        '(veja .env.example) antes de iniciar a aplicação.'
+    )
 JWT_ALGORITHM = 'HS256'
 JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)  # Token de acesso expira em 24h
 JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)  # Token de refresh expira em 30 dias
@@ -94,6 +101,20 @@ def get_token_from_header() -> Optional[str]:
     return None
 
 
+def get_user_id_from_payload(payload: Dict[str, Any]) -> Optional[int]:
+    """
+    Lê a claim 'sub' e normaliza para int (convenção única do serviço).
+
+    O token grava 'sub' como str, mas o banco guarda 'id' como int. Toda leitura
+    da identidade passa por aqui para que comparações de posse e buscas no banco
+    usem sempre int. Retorna None se a claim estiver ausente ou não for numérica.
+    """
+    try:
+        return int(payload['sub'])
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
 def jwt_required(f):
     """
     Decorator que exige autenticação JWT válida.
@@ -115,12 +136,15 @@ def jwt_required(f):
             return jsonify({'error': 'Tipo de token inválido'}), 401
         
         # Adiciona informações do usuário ao contexto da requisição
-        g.user_id = payload.get('sub')
+        user_id = get_user_id_from_payload(payload)
+        if user_id is None:
+            return jsonify({'error': 'Token inválido: identificação de usuário ausente'}), 401
+        g.user_id = user_id
         g.user_type = payload.get('type')
         g.user_email = payload.get('email')
-        
+
         return f(*args, **kwargs)
-    
+
     return decorated
 
 
@@ -137,7 +161,7 @@ def jwt_optional(f):
         if token:
             success, payload, _ = decode_token(token)
             if success and payload.get('token_type') == 'access':
-                g.user_id = payload.get('sub')
+                g.user_id = get_user_id_from_payload(payload)
                 g.user_type = payload.get('type')
                 g.user_email = payload.get('email')
             else:
@@ -176,8 +200,8 @@ def admin_required(f):
         
         if payload.get('type') != 'Administrador':
             return jsonify({'error': 'Acesso negado. Requer privilégios de administrador'}), 403
-        
-        g.user_id = payload.get('sub')
+
+        g.user_id = get_user_id_from_payload(payload)
         g.user_type = payload.get('type')
         g.user_email = payload.get('email')
         
@@ -209,18 +233,21 @@ def owner_or_admin_required(user_id_param: str = 'user_id'):
             if payload.get('token_type') != 'access':
                 return jsonify({'error': 'Tipo de token inválido'}), 401
             
-            g.user_id = payload.get('sub')
+            user_id = get_user_id_from_payload(payload)
+            if user_id is None:
+                return jsonify({'error': 'Token inválido: identificação de usuário ausente'}), 401
+            g.user_id = user_id
             g.user_type = payload.get('type')
             g.user_email = payload.get('email')
-            
-            # Verifica se é admin ou dono do recurso
+
+            # Verifica se é admin ou dono do recurso (comparação int vs int)
             resource_user_id = kwargs.get(user_id_param)
             if resource_user_id is not None:
                 try:
                     resource_user_id = int(resource_user_id)
                 except (ValueError, TypeError):
-                    pass
-            
+                    resource_user_id = None
+
             if g.user_type != 'Administrador' and g.user_id != resource_user_id:
                 return jsonify({'error': 'Acesso negado. Você não tem permissão para este recurso'}), 403
             
@@ -249,8 +276,10 @@ def refresh_access_token(refresh_token: str, db) -> Tuple[bool, Optional[Dict[st
     if payload.get('token_type') != 'refresh':
         return False, None, 'Token de refresh inválido'
     
-    user_id = payload.get('sub')
-    
+    user_id = get_user_id_from_payload(payload)
+    if user_id is None:
+        return False, None, 'Token de refresh inválido'
+
     # Busca usuário no banco para obter dados atualizados
     from app.models.user_model import get_collection
     users = get_collection(db)

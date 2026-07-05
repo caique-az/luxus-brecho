@@ -27,7 +27,7 @@ Cada fase é um bloco entregável e testável isoladamente. Faça **uma fase por
   2. Em `owner_or_admin_required`, garantir que `resource_user_id` também é int (já há `int()` na linha 220) e comparar `g.user_id != resource_user_id` com ambos int.
   3. Em `refresh_access_token`, trocar `find_one({'id': user_id})` por `find_one({'id': int(user_id)})`.
 - **Critério de aceite:** um Cliente logado consegue `GET /api/users/<seu_id>` (200, não 403); `POST /api/users/refresh-token` devolve novos tokens (200, não 401).
-- [ ] Concluído
+- [x] Concluído
 
 ### 1.2 — `JWT_SECRET_KEY` sem fallback público (fail-fast) `[#7]`
 - **Arquivo:** `backend/app/services/jwt_service.py:15`
@@ -36,7 +36,7 @@ Cada fase é um bloco entregável e testável isoladamente. Faça **uma fase por
   1. Remover o default. Ler `os.environ['JWT_SECRET_KEY']` e, se ausente, lançar `RuntimeError` no import/startup.
   2. Confirmar que `JWT_SECRET_KEY` está no `.env`/variáveis do ambiente de deploy (Vercel) e no `.env.example`.
 - **Critério de aceite:** app não sobe sem `JWT_SECRET_KEY` definido; nenhuma string de segredo hardcoded no código.
-- [ ] Concluído
+- [x] Concluído
 
 **Teste de fumaça da Fase 1:** login → acesso ao próprio perfil → refresh-token, todos 200.
 

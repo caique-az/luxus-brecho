@@ -70,21 +70,21 @@ Prioridades:
 - **Problema:** `sub` é gravado como `str(user_id)` (linha 35), mas o decorator faz `int(resource_user_id)` (linha 220) e compara `g.user_id != resource_user_id`. `'5' != 5` é sempre `True`.
 - **Impacto:** nenhum não-admin acessa o próprio perfil/atualização/troca de senha — todos recebem 403. Quebra usuários legítimos.
 - **Correção sugerida:** padronizar o tipo. Ex.: comparar como string (`str(resource_user_id)`) ou converter `g.user_id = int(payload['sub'])` de forma consistente em `jwt_required`/`admin_required`/`owner_or_admin_required`. **Escolher UMA convenção e aplicar em todo o serviço** (ver também item 6).
-- [ ] Corrigido
+- [x] Corrigido — convenção `int` via helper `get_user_id_from_payload`
 
 ### 6. Refresh de token sempre falha (mesmo bug str vs int)
 - **Local:** `backend/app/services/jwt_service.py:257`
 - **Problema:** `find_one({'id': user_id})` com `user_id = payload['sub']` (string), mas o `id` é armazenado como `int` (`user_model.py` schema `:73-76`). A busca nunca casa.
 - **Impacto:** `POST /api/users/refresh-token` sempre retorna 401 "Usuário não encontrado"; refresh quebrado para todos, forçando novo login ao expirar o access token de 24h.
 - **Correção sugerida:** `find_one({'id': int(user_id)})` (ou converter na convenção única do item 5).
-- [ ] Corrigido
+- [x] Corrigido — `sub` normalizado para `int` antes do `find_one`
 
 ### 7. `JWT_SECRET_KEY` com fallback público
 - **Local:** `backend/app/services/jwt_service.py:15`
 - **Problema:** fallback para a constante `'luxus-brecho-secret-key-change-in-production'` quando a env var não está definida.
 - **Impacto:** deploy sem `JWT_SECRET_KEY` assina com uma chave do repositório → tokens de admin forjáveis por qualquer um que leia o código.
 - **Correção sugerida:** falhar rápido no startup se `JWT_SECRET_KEY` estiver ausente (sem default). Idealmente centralizar num módulo de config validado.
-- [ ] Corrigido
+- [x] Corrigido — `RuntimeError` no import se a env var estiver ausente
 
 ### 8. Exclusão de conta sem auth e força-brutável
 - **Local:** `backend/app/controllers/users_controller.py:742` (`confirm_account_deletion`) + rotas `users_routes.py:142-143`
