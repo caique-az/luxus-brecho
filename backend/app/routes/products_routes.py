@@ -8,6 +8,9 @@ import time
 from functools import wraps
 
 from ..services.jwt_service import jwt_optional, admin_required
+from ..utils.serialization import serialize_doc as _serialize
+from ..utils.pagination import get_pagination_params
+from ..utils.decorators import require_db
 
 class ProductQuerySchema(Schema):
     page = fields.Integer(load_default=1, validate=lambda x: 1 <= x <= 1000)
@@ -26,15 +29,8 @@ from ..services.supabase_storage import storage_service
 # Create the Blueprint
 products_bp = Blueprint('products', __name__)
 
-def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
-    """Helper function to serialize MongoDB documents"""
-    if not doc:
-        return {}
-    d = dict(doc)
-    d.pop("_id", None)
-    return d
-
 @products_bp.route('/', methods=['GET'])
+@require_db
 def list_products():
     """List all products with optional filtering and pagination"""
     schema = ProductQuerySchema()
@@ -48,8 +44,6 @@ def list_products():
         }), 400
     
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     coll = get_collection(db)
 
@@ -87,11 +81,10 @@ def list_products():
     )
 
 @products_bp.route('/<int:id>', methods=['GET'])
+@require_db
 def get_product(id: int):
     """Get a single product by ID"""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
     
     coll = get_collection(db)
     doc = coll.find_one({"id": int(id)})
@@ -103,11 +96,10 @@ def get_product(id: int):
 
 @products_bp.route('/', methods=['POST'])
 @admin_required
+@require_db
 def create_product():
     """Create a new product - Admin only"""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
     
     coll = get_collection(db)
     payload = request.get_json(silent=True) or {}
@@ -125,11 +117,10 @@ def create_product():
 
 @products_bp.route('/<int:id>', methods=['PUT'])
 @admin_required
+@require_db
 def update_product(id: int):
     """Update an existing product - Admin only"""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
     
     coll = get_collection(db)
     current = coll.find_one({"id": int(id)})
@@ -159,11 +150,10 @@ def update_product(id: int):
 
 @products_bp.route('/<int:id>', methods=['DELETE'])
 @admin_required
+@require_db
 def delete_product(id: int):
     """Delete a product - Admin only"""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
     
     coll = get_collection(db)
     
@@ -188,6 +178,7 @@ def delete_product(id: int):
 
 @products_bp.route('/with-image', methods=['POST'])
 @admin_required
+@require_db
 def create_product_with_image():
     """
     Create product with image upload
@@ -198,8 +189,6 @@ def create_product_with_image():
     - image: image file
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
     
     try:
         # Detailed image validation
@@ -319,6 +308,7 @@ def create_product_with_image():
 
 @products_bp.route('/<int:id>/image', methods=['PUT'])
 @admin_required
+@require_db
 def update_product_image(id: int):
     """
     Update only the image of a product - Admin only
@@ -328,8 +318,6 @@ def update_product_image(id: int):
     - image: new image file
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
     
     coll = get_collection(db)
     
@@ -376,16 +364,14 @@ def update_product_image(id: int):
         return jsonify(message="Erro interno no servidor"), 500
 
 @products_bp.route('/category/<string:categoria>', methods=['GET'])
+@require_db
 def get_products_by_category(categoria: str):
     """Get products by specific category"""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     coll = get_collection(db)
-    
-    page = max(int(request.args.get("page", 1) or 1), 1)
-    page_size = min(max(int(request.args.get("page_size", 20) or 20), 1), 100)
+
+    page, page_size = get_pagination_params()
 
     query = {"categoria": categoria}
     cursor = coll.find(query).sort("titulo", 1)

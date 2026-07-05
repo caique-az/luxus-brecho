@@ -32,6 +32,7 @@ logging.getLogger('werkzeug').setLevel(logging.INFO)
 # Agora importa as bibliotecas
 from flask import Flask, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, OperationFailure
 from pymongo.server_api import ServerApi
@@ -305,7 +306,23 @@ def create_app():
             'message': 'Arquivo muito grande',
             'max_size': '16MB'
         }), 413
-    
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(error):
+        # Handlers de HTTPException (404/405/413/...) têm precedência; se um
+        # chegar aqui, deixa o Flask processá-lo normalmente.
+        if isinstance(error, HTTPException):
+            return error
+        # Rede de segurança única para exceções não tratadas nos controllers:
+        # loga com stack trace e devolve o envelope padrão em vez de deixar
+        # cada função reimplementar try/except → 500.
+        app.logger.exception(f"Erro não tratado: {error}")
+        return jsonify({
+            'success': False,
+            'message': 'Erro interno do servidor',
+            'error': str(error) if app.config['DEBUG'] else 'Erro interno'
+        }), 500
+
     print("🚀 Aplicação Flask criada com sucesso!")
     
     return app

@@ -9,6 +9,9 @@ from ..models.category_model import (
     validate_category,
     normalize_category,
 )
+from ..utils.serialization import serialize_doc as _serialize
+from ..utils.pagination import get_pagination_params
+from ..utils.decorators import require_db
 
 
 def _invalidate_categories_cache():
@@ -20,27 +23,15 @@ def _invalidate_categories_cache():
         pass  # Cache não disponível
 
 
-def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
-    """Remove campos internos do MongoDB do documento."""
-    if not doc:
-        return {}
-    d = dict(doc)
-    d.pop("_id", None)
-    return d
-
-
+@require_db
 def list_categories():
     """Lista todas as categorias com filtros opcionais."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="database unavailable"), 503
-
     coll = get_collection(db)
 
     # Filtro por status ativo
     active_only = request.args.get("active_only", "false").lower() == "true"
-    page = max(int(request.args.get("page", 1) or 1), 1)
-    page_size = min(max(int(request.args.get("page_size", 10) or 10), 1), 100)
+    page, page_size = get_pagination_params(default_size=10)
 
     query: Dict[str, Any] = {}
     if active_only:
@@ -63,11 +54,10 @@ def list_categories():
     )
 
 
+@require_db
 def get_category(id: int):
     """Busca uma categoria específica por ID."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="database unavailable"), 503
     coll = get_collection(db)
 
     doc = coll.find_one({"id": int(id)})
@@ -76,11 +66,10 @@ def get_category(id: int):
     return jsonify(_serialize(doc))
 
 
+@require_db
 def create_category():
     """Cria uma nova categoria."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="database unavailable"), 503
     coll = get_collection(db)
 
     payload = request.get_json(silent=True) or {}
@@ -93,7 +82,7 @@ def create_category():
         existing = coll.find_one({"name": doc["name"]})
         if existing:
             return jsonify(message="category name already exists"), 409
-            
+
         coll.insert_one(doc)
         _invalidate_categories_cache()  # Invalida cache após criar
     except DuplicateKeyError:
@@ -102,11 +91,10 @@ def create_category():
     return jsonify(_serialize(doc)), 201
 
 
+@require_db
 def update_category(id: int):
     """Atualiza uma categoria existente."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="database unavailable"), 503
     coll = get_collection(db)
 
     current = coll.find_one({"id": int(id)})
@@ -139,11 +127,10 @@ def update_category(id: int):
     return jsonify(_serialize(updated))
 
 
+@require_db
 def delete_category(id: int):
     """Deleta permanentemente uma categoria se não houver produtos associados."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="database unavailable"), 503
     coll = get_collection(db)
 
     category = coll.find_one({"id": int(id)})
@@ -155,7 +142,7 @@ def delete_category(id: int):
     products_using_category = current_app.db.products.count_documents(
         {"categoria": category_name}
     )
-    
+
     # Se não encontrou com o nome exato, tenta com capitalização padrão
     if products_using_category == 0:
         products_using_category = current_app.db.products.count_documents(
@@ -175,11 +162,10 @@ def delete_category(id: int):
     return jsonify(message="erro ao deletar categoria"), 500
 
 
+@require_db
 def deactivate_category(id: int):
     """Desativa uma categoria (soft delete)."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="database unavailable"), 503
     coll = get_collection(db)
 
     category = coll.find_one({"id": int(id)})
@@ -194,11 +180,10 @@ def deactivate_category(id: int):
     return jsonify(message="categoria desativada com sucesso"), 200
 
 
+@require_db
 def activate_category(id: int):
     """Reativa uma categoria inativa."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="database unavailable"), 503
     coll = get_collection(db)
 
     category = coll.find_one({"id": int(id)})
@@ -211,19 +196,16 @@ def activate_category(id: int):
     return jsonify(_serialize(updated))
 
 
-
+@require_db
 def get_categories_summary():
     """Retorna resumo das categorias para uso em outros endpoints."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="database unavailable"), 503
-    
     coll = get_collection(db)
-    
+
     # Busca apenas categorias ativas
     active_categories = list(coll.find(
-        {"active": True}, 
+        {"active": True},
         {"_id": 0, "id": 1, "name": 1, "description": 1}
     ).sort("name", 1))
-    
+
     return jsonify(active_categories)

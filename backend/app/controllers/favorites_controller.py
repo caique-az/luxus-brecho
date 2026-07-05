@@ -19,6 +19,7 @@ from ..models.favorite_model import (
     ensure_indexes
 )
 from ..models.product_model import get_collection as get_products_collection
+from ..utils.decorators import require_db
 
 
 def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -46,6 +47,7 @@ def require_auth(f):
     return decorated_function
 
 
+@require_db
 def list_user_favorites(user_id: str):
     """
     Lista todos os favoritos do usuário com detalhes dos produtos.
@@ -68,8 +70,6 @@ def list_user_favorites(user_id: str):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Buscar favoritos
     success, error, favorites = get_user_favorites(db, user_id)
@@ -107,6 +107,7 @@ def list_user_favorites(user_id: str):
     ), 200
 
 
+@require_db
 def add_to_favorites(user_id: str):
     """
     Adiciona um produto aos favoritos.
@@ -122,8 +123,6 @@ def add_to_favorites(user_id: str):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Validar payload
     payload = request.get_json()
@@ -157,6 +156,7 @@ def add_to_favorites(user_id: str):
     ), 201
 
 
+@require_db
 def remove_from_favorites(user_id: str, product_id: int):
     """
     Remove um produto dos favoritos.
@@ -170,8 +170,6 @@ def remove_from_favorites(user_id: str, product_id: int):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Remover favorito
     success, error = remove_favorite(db, user_id, product_id)
@@ -184,6 +182,7 @@ def remove_from_favorites(user_id: str, product_id: int):
     return jsonify(message="Produto removido dos favoritos"), 200
 
 
+@require_db
 def check_favorite(user_id: str, product_id: int):
     """
     Verifica se um produto está nos favoritos.
@@ -197,8 +196,6 @@ def check_favorite(user_id: str, product_id: int):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Verificar se está favoritado
     favorited = is_favorited(db, user_id, product_id)
@@ -206,6 +203,7 @@ def check_favorite(user_id: str, product_id: int):
     return jsonify(is_favorited=favorited), 200
 
 
+@require_db
 def toggle_favorite(user_id: str):
     """
     Alterna o estado de favorito (adiciona se não existe, remove se existe).
@@ -221,8 +219,6 @@ def toggle_favorite(user_id: str):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Validar payload
     payload = request.get_json()

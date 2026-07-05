@@ -20,6 +20,8 @@ from ..models.user_model import (
 )
 from ..services.email_service import send_confirmation_email, send_welcome_email, send_password_reset_email, send_account_deletion_code
 from ..services.jwt_service import create_access_token, create_refresh_token, refresh_access_token, JWT_ACCESS_TOKEN_EXPIRES
+from ..utils.pagination import get_pagination_params
+from ..utils.decorators import require_db
 import random
 
 
@@ -30,19 +32,17 @@ def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
     return normalize_user(doc)
 
 
+@require_db
 def list_users():
     """Lista usuários com paginação e filtros."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     coll = get_collection(db)
 
     try:
         # Parâmetros de paginação
-        page = int(request.args.get("page", 1))
-        page_size = int(request.args.get("page_size", 20))
-        
+        page, page_size = get_pagination_params()
+
         # Parâmetros de filtro
         tipo = request.args.get("tipo")
         ativo = request.args.get("ativo")
@@ -88,11 +88,10 @@ def list_users():
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def get_user(id: int):
     """Busca usuário por ID."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     coll = get_collection(db)
 
@@ -108,11 +107,10 @@ def get_user(id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def create_user():
     """Cria novo usuário."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -171,11 +169,10 @@ def create_user():
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def update_user(id: int):
     """Atualiza usuário existente."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -232,11 +229,10 @@ def update_user(id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def delete_user(id: int):
     """Exclui usuário (soft delete - marca como inativo)."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         coll = get_collection(db)
@@ -272,11 +268,10 @@ def delete_user(id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def authenticate_user():
     """Autentica usuário com email e senha."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -334,11 +329,10 @@ def authenticate_user():
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def refresh_token_endpoint():
     """Renova o access token usando um refresh token válido."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -361,11 +355,10 @@ def refresh_token_endpoint():
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def change_password(id: int):
     """Altera senha do usuário."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -422,11 +415,10 @@ def get_user_types():
     })
 
 
+@require_db
 def get_users_summary():
     """Retorna resumo de usuários por tipo."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         coll = get_collection(db)
@@ -464,11 +456,10 @@ def get_users_summary():
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def confirm_email(token: str):
     """Confirma email do usuário através do token."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         coll = get_collection(db)
@@ -513,11 +504,10 @@ def confirm_email(token: str):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def resend_confirmation_email():
     """Reenvia email de confirmação."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -569,11 +559,10 @@ def resend_confirmation_email():
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def forgot_password():
     """Envia email para recuperação de senha."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -621,11 +610,10 @@ def forgot_password():
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def reset_password():
     """Redefine senha usando token de recuperação."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -683,11 +671,10 @@ def reset_password():
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def request_account_deletion():
     """Solicita exclusão de conta - envia código de 6 dígitos por email."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -739,11 +726,10 @@ def request_account_deletion():
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def confirm_account_deletion():
     """Confirma exclusão de conta com código de 6 dígitos."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
