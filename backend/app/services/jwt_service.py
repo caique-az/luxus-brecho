@@ -81,6 +81,20 @@ def decode_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]], Optional[s
         return False, None, f'Token inválido: {str(e)}'
 
 
+def _extract_user_id(payload: Dict[str, Any]):
+    """Recupera o id do usuário do claim ``sub``.
+
+    O token guarda ``sub`` como string (``str(user_id)``), mas os ids no Mongo
+    são inteiros (users/carts/orders). Retorna int quando possível para que as
+    comparações de dono e as queries por ``id`` batam com o banco.
+    """
+    sub = payload.get('sub')
+    try:
+        return int(sub)
+    except (TypeError, ValueError):
+        return sub
+
+
 def get_token_from_header() -> Optional[str]:
     """
     Extrai o token do header Authorization.
@@ -115,7 +129,7 @@ def jwt_required(f):
             return jsonify({'error': 'Tipo de token inválido'}), 401
         
         # Adiciona informações do usuário ao contexto da requisição
-        g.user_id = payload.get('sub')
+        g.user_id = _extract_user_id(payload)
         g.user_type = payload.get('type')
         g.user_email = payload.get('email')
         
@@ -137,7 +151,7 @@ def jwt_optional(f):
         if token:
             success, payload, _ = decode_token(token)
             if success and payload.get('token_type') == 'access':
-                g.user_id = payload.get('sub')
+                g.user_id = _extract_user_id(payload)
                 g.user_type = payload.get('type')
                 g.user_email = payload.get('email')
             else:
@@ -177,7 +191,7 @@ def admin_required(f):
         if payload.get('type') != 'Administrador':
             return jsonify({'error': 'Acesso negado. Requer privilégios de administrador'}), 403
         
-        g.user_id = payload.get('sub')
+        g.user_id = _extract_user_id(payload)
         g.user_type = payload.get('type')
         g.user_email = payload.get('email')
         
@@ -209,7 +223,7 @@ def owner_or_admin_required(user_id_param: str = 'user_id'):
             if payload.get('token_type') != 'access':
                 return jsonify({'error': 'Tipo de token inválido'}), 401
             
-            g.user_id = payload.get('sub')
+            g.user_id = _extract_user_id(payload)
             g.user_type = payload.get('type')
             g.user_email = payload.get('email')
             
@@ -248,9 +262,9 @@ def refresh_access_token(refresh_token: str, db) -> Tuple[bool, Optional[Dict[st
     
     if payload.get('token_type') != 'refresh':
         return False, None, 'Token de refresh inválido'
-    
-    user_id = payload.get('sub')
-    
+
+    user_id = _extract_user_id(payload)
+
     # Busca usuário no banco para obter dados atualizados
     from app.models.user_model import get_collection
     users = get_collection(db)
