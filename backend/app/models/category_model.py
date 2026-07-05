@@ -132,19 +132,7 @@ def ensure_categories_collection(db):
 
     coll = db[COLLECTION_NAME]
 
-    # Limpa índices existentes
-    try:
-        indices = coll.list_indexes()
-        for idx in indices:
-            if idx.get('name') not in ['_id_']:
-                try:
-                    coll.drop_index(idx['name'])
-                except Exception as e:
-                    print(f"Aviso: não foi possível remover índice {idx['name']}: {e}")
-    except Exception as e:
-        print(f"Aviso: erro ao listar/remover índices: {e}")
-
-    # Cria novos índices
+    # Índices (create_index é idempotente: no-op quando já existe)
     try:
         coll.create_index([("id", ASCENDING)], unique=True, name="uniq_id")
     except Exception as e:
@@ -210,10 +198,9 @@ def prepare_new_category(db, payload: Dict[str, Any]) -> Tuple[bool, Dict[str, s
     if not ok:
         return False, errors, {}
 
-    # Gera id se não informado
+    # Gera id se não informado (get_next_sequence faz upsert do contador)
     if "id" not in data:
         try:
-            ensure_counters_collection(db)
             data["id"] = get_next_sequence(db, COUNTER_KEY_CATEGORIES)
         except Exception as e:
             errors["id"] = f"falha ao gerar id: {e}"

@@ -6,11 +6,7 @@ from datetime import datetime
 from typing import Dict, Any
 from bson import ObjectId
 
-from ..models.cart_model import (
-    get_collection,
-    normalize_cart,
-    validate_cart_item,
-)
+from ..models.cart_model import get_collection
 
 
 def get_user_cart(user_id: int):

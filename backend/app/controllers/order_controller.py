@@ -90,14 +90,23 @@ def create_order(user_id: int):
         if not is_valid:
             return jsonify(message=error_msg), 400
 
-        # Busca informações dos produtos
+        # Busca informações dos produtos numa única query
         products_coll = db["products"]
+        items = payload.get("items", [])
+        products_by_id = {
+            p["id"]: p
+            for p in products_coll.find(
+                {"id": {"$in": [item.get("product_id") for item in items]}},
+                {"_id": 0, "id": 1, "status": 1, "preco": 1, "titulo": 1, "imagem": 1},
+            )
+        }
+
         items_with_details = []
         total = 0
         product_ids_to_update = []
-        
-        for item in payload.get("items", []):
-            product = products_coll.find_one({"id": item.get("product_id")})
+
+        for item in items:
+            product = products_by_id.get(item.get("product_id"))
             if product:
                 if product.get("status") != "disponivel":
                     return jsonify(message=f"Produto '{product.get('titulo')}' não está disponível"), 400
@@ -141,13 +150,13 @@ def create_order(user_id: int):
                         coll.insert_one(order, session=session)
                         
                         # Atualiza status dos produtos para vendido
-                        for product_id in product_ids_to_update:
-                            products_coll.update_one(
-                                {"id": product_id},
+                        if product_ids_to_update:
+                            products_coll.update_many(
+                                {"id": {"$in": product_ids_to_update}},
                                 {"$set": {"status": "vendido"}},
                                 session=session
                             )
-                        
+
                         # Limpa o carrinho do usuário
                         cart_coll.update_one(
                             {"user_id": user_id},
@@ -177,13 +186,13 @@ def create_order(user_id: int):
 def _create_order_without_transaction(coll, products_coll, cart_coll, order, product_ids, user_id, now):
     """Cria pedido sem transação (fallback)."""
     coll.insert_one(order)
-    
-    for product_id in product_ids:
-        products_coll.update_one(
-            {"id": product_id},
+
+    if product_ids:
+        products_coll.update_many(
+            {"id": {"$in": product_ids}},
             {"$set": {"status": "vendido"}}
         )
-    
+
     cart_coll.update_one(
         {"user_id": user_id},
         {"$set": {"items": [], "updated_at": now}}
@@ -250,9 +259,10 @@ def cancel_order(order_id: int):
             return jsonify(message="Não é possível cancelar pedido já enviado ou entregue"), 400
 
         # Restaura status dos produtos para disponível
-        for item in order.get("items", []):
-            products_coll.update_one(
-                {"id": item.get("product_id")},
+        product_ids = [item.get("product_id") for item in order.get("items", [])]
+        if product_ids:
+            products_coll.update_many(
+                {"id": {"$in": product_ids}},
                 {"$set": {"status": "disponivel"}}
             )
 

@@ -369,8 +369,8 @@ def create_default_admin(db):
         collection.insert_one(user_data)
         
         print("✅ Usuário administrador padrão criado:")
-        print("   Email: admin@luxusbrecho.com")
-        print("   Senha: admin123")
+        print(f"   Email: {admin_data['email']}")
+        print(f"   Senha: {admin_data['senha']}")
         print("   ⚠️  ALTERE A SENHA PADRÃO IMEDIATAMENTE!")
         
     except Exception as e:
