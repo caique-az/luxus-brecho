@@ -20,6 +20,7 @@ from ..models.favorite_model import (
 )
 from ..models.product_model import get_collection as get_products_collection
 from ..utils.decorators import require_db
+from ..utils.serialization import serialize_doc
 
 
 def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -91,10 +92,7 @@ def list_user_favorites(user_id: str):
         product = products_dict.get(fav['product_id'])
         
         if product:
-            # Remover _id do produto
-            product_data = dict(product)
-            product_data.pop('_id', None)
-            fav_data['product'] = product_data
+            fav_data['product'] = serialize_doc(product)
         else:
             # Produto não existe mais, mas mantém o favorito
             fav_data['product'] = None

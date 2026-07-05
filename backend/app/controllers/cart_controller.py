@@ -3,8 +3,6 @@ Controller para gerenciamento de carrinhos de compras.
 """
 from flask import jsonify, request, current_app
 from datetime import datetime
-from typing import Dict, Any
-from bson import ObjectId
 
 from ..models.cart_model import get_collection
 from ..utils.decorators import require_db

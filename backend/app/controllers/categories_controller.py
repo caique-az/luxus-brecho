@@ -1,6 +1,5 @@
 from flask import request, jsonify, current_app
 from pymongo.errors import DuplicateKeyError
-from bson import ObjectId
 from typing import Any, Dict
 
 from ..models.category_model import (
@@ -9,7 +8,7 @@ from ..models.category_model import (
     validate_category,
     normalize_category,
 )
-from ..utils.serialization import serialize_doc as _serialize
+from ..utils.serialization import serialize_doc
 from ..utils.pagination import get_pagination_params
 from ..utils.decorators import require_db
 
@@ -41,7 +40,7 @@ def list_categories():
     total = coll.count_documents(query)
 
     items = [
-        _serialize(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
+        serialize_doc(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
     ]
 
     return jsonify(
@@ -63,7 +62,7 @@ def get_category(id: int):
     doc = coll.find_one({"id": int(id)})
     if not doc:
         return jsonify(message="category not found"), 404
-    return jsonify(_serialize(doc))
+    return jsonify(serialize_doc(doc))
 
 
 @require_db
@@ -88,7 +87,7 @@ def create_category():
     except DuplicateKeyError:
         return jsonify(message="category id already exists"), 409
 
-    return jsonify(_serialize(doc)), 201
+    return jsonify(serialize_doc(doc)), 201
 
 
 @require_db
@@ -103,8 +102,7 @@ def update_category(id: int):
 
     payload = request.get_json(silent=True) or {}
     # Merge parcial
-    merged = dict(current)
-    merged.pop("_id", None)
+    merged = serialize_doc(current)
     merged.update(payload)
     merged = normalize_category(merged)
 
@@ -124,7 +122,7 @@ def update_category(id: int):
     coll.update_one({"id": int(id)}, {"$set": merged})
     _invalidate_categories_cache()  # Invalida cache após atualizar
     updated = coll.find_one({"id": int(id)})
-    return jsonify(_serialize(updated))
+    return jsonify(serialize_doc(updated))
 
 
 @require_db
@@ -163,24 +161,6 @@ def delete_category(id: int):
 
 
 @require_db
-def deactivate_category(id: int):
-    """Desativa uma categoria (soft delete)."""
-    db = current_app.db
-    coll = get_collection(db)
-
-    category = coll.find_one({"id": int(id)})
-    if not category:
-        return jsonify(message="categoria não encontrada"), 404
-
-    if not category.get("active", True):
-        return jsonify(message="categoria já está desativada"), 400
-
-    coll.update_one({"id": int(id)}, {"$set": {"active": False}})
-    _invalidate_categories_cache()  # Invalida cache após desativar
-    return jsonify(message="categoria desativada com sucesso"), 200
-
-
-@require_db
 def activate_category(id: int):
     """Reativa uma categoria inativa."""
     db = current_app.db
@@ -193,7 +173,7 @@ def activate_category(id: int):
     coll.update_one({"id": int(id)}, {"$set": {"active": True}})
     _invalidate_categories_cache()  # Invalida cache após ativar
     updated = coll.find_one({"id": int(id)})
-    return jsonify(_serialize(updated))
+    return jsonify(serialize_doc(updated))
 
 
 @require_db

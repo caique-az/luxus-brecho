@@ -1,14 +1,12 @@
 from __future__ import annotations
 from flask import Blueprint, request, jsonify, current_app
 from pymongo.errors import DuplicateKeyError
-from bson import ObjectId
 from typing import Any, Dict
 from marshmallow import Schema, fields, ValidationError
 import time
-from functools import wraps
 
 from ..services.jwt_service import jwt_optional, admin_required
-from ..utils.serialization import serialize_doc as _serialize
+from ..utils.serialization import serialize_doc
 from ..utils.pagination import get_pagination_params
 from ..utils.decorators import require_db
 
@@ -68,7 +66,7 @@ def list_products():
     total = coll.count_documents(query)
 
     items = [
-        _serialize(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
+        serialize_doc(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
     ]
 
     return jsonify(
@@ -92,7 +90,7 @@ def get_product(id: int):
     if not doc:
         return jsonify(message="produto não encontrado"), 404
     
-    return jsonify(_serialize(doc))
+    return jsonify(serialize_doc(doc))
 
 @products_bp.route('/', methods=['POST'])
 @admin_required
@@ -113,7 +111,7 @@ def create_product():
     except DuplicateKeyError:
         return jsonify(message="ID já existente"), 409
 
-    return jsonify(_serialize(doc)), 201
+    return jsonify(serialize_doc(doc)), 201
 
 @products_bp.route('/<int:id>', methods=['PUT'])
 @admin_required
@@ -129,10 +127,9 @@ def update_product(id: int):
         return jsonify(message="produto não encontrado"), 404
 
     payload = request.get_json(silent=True) or {}
-    
+
     # Merge parcial
-    merged = dict(current)
-    merged.pop("_id", None)
+    merged = serialize_doc(current)
     merged.update(payload)
     merged = normalize_product(merged)
 
@@ -146,7 +143,7 @@ def update_product(id: int):
     coll.update_one({"id": int(id)}, {"$set": merged})
     updated = coll.find_one({"id": int(id)})
     
-    return jsonify(_serialize(updated))
+    return jsonify(serialize_doc(updated))
 
 @products_bp.route('/<int:id>', methods=['DELETE'])
 @admin_required
@@ -299,7 +296,7 @@ def create_product_with_image():
         
         return jsonify({
             "message": "Produto criado com sucesso",
-            "product": _serialize(product_doc)
+            "product": serialize_doc(product_doc)
         }), 201
         
     except Exception as e:
@@ -356,7 +353,7 @@ def update_product_image(id: int):
         updated_product = coll.find_one({"id": int(id)})
         return jsonify({
             "message": "Imagem atualizada com sucesso",
-            "product": _serialize(updated_product)
+            "product": serialize_doc(updated_product)
         }), 200
         
     except Exception as e:
@@ -378,7 +375,7 @@ def get_products_by_category(categoria: str):
     total = coll.count_documents(query)
 
     items = [
-        _serialize(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
+        serialize_doc(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
     ]
 
     if not items:
