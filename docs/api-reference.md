@@ -9,17 +9,12 @@ API REST do Luxus Brechó. Todas as rotas têm prefixo **`/api`** e respondem JS
 
 ## Autenticação
 
-Há dois esquemas, dependendo do recurso:
-
-| Esquema | Como enviar | Recursos |
-|---------|-------------|----------|
-| **JWT** | `Authorization: Bearer <access_token>` | Usuários, escrita de Produtos e Categorias (admin) |
-| **X-User-Id** | `X-User-Id: <user_id>` | Favoritos |
+Autenticação é **sempre via JWT** (`Authorization: Bearer <access_token>`): usuários, escrita de produtos e categorias (admin), e também carrinho, pedidos e favoritos. A identidade vem do token (`g.user_id`).
 
 Tokens são obtidos em `POST /api/users/auth`. O **access token** vale 24h; renove com o **refresh token** (30 dias) em `POST /api/users/refresh-token`.
 
 Marcação usada abaixo:
-- 🔓 público · 🔑 requer JWT · 👑 requer JWT de admin · 👤 dono ou admin · 🆔 requer header `X-User-Id`
+- 🔓 público · 🔑 requer JWT · 👑 requer JWT de admin · 👤 dono ou admin
 
 ## Convenções de resposta
 
@@ -154,44 +149,46 @@ Integração com Supabase Storage.
 
 ---
 
-## Favoritos (`/api/favorites`) 🆔
+## Favoritos (`/api/favorites`) 🔑
 
-Todas as rotas exigem o header `X-User-Id: <user_id>`.
+Todas as rotas exigem **JWT** (`Authorization: Bearer`). A identidade vem do token; não há mais `X-User-Id`.
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/favorites` | Lista favoritos do usuário |
-| POST | `/api/favorites` | Adiciona produto (`{ "product_id": 12 }`) |
-| DELETE | `/api/favorites/<product_id>` | Remove dos favoritos |
-| GET | `/api/favorites/check/<product_id>` | Indica se está favoritado |
-| POST | `/api/favorites/toggle` | Alterna favorito (`{ "product_id": 12 }`) |
+| Método | Rota | Auth | Descrição |
+|--------|------|------|-----------|
+| GET | `/api/favorites` | 🔑 | Lista favoritos do usuário |
+| POST | `/api/favorites` | 🔑 | Adiciona produto (`{ "product_id": 12 }`) |
+| DELETE | `/api/favorites/<product_id>` | 🔑 | Remove dos favoritos |
+| GET | `/api/favorites/check/<product_id>` | 🔑 | Indica se está favoritado |
+| POST | `/api/favorites/toggle` | 🔑 | Alterna favorito (`{ "product_id": 12 }`) |
 
 ---
 
 ## Carrinho (`/api/cart`)
 
-Identificação pelo `user_id` na URL. Lembre: produto é **peça única** — não há quantidade real por item.
+Exige **JWT**: o `user_id` da URL deve ser o dono do token (ou admin). Lembre: produto é **peça única** — não há quantidade real por item.
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/cart/<user_id>` | Carrinho do usuário |
-| POST | `/api/cart/<user_id>/add` | Adiciona item |
-| POST | `/api/cart/<user_id>/remove` | Remove item |
-| PUT | `/api/cart/<user_id>/update` | Atualiza item |
-| DELETE | `/api/cart/<user_id>/clear` | Esvazia o carrinho |
-| POST | `/api/cart/<user_id>/sync` | Sincroniza carrinho local ↔ servidor |
+| Método | Rota | Auth | Descrição |
+|--------|------|------|-----------|
+| GET | `/api/cart/<user_id>` | 👤 | Carrinho do usuário |
+| POST | `/api/cart/<user_id>/add` | 👤 | Adiciona item |
+| POST | `/api/cart/<user_id>/remove` | 👤 | Remove item |
+| PUT | `/api/cart/<user_id>/update` | 👤 | Atualiza item |
+| DELETE | `/api/cart/<user_id>/clear` | 👤 | Esvazia o carrinho |
+| POST | `/api/cart/<user_id>/sync` | 👤 | Sincroniza carrinho local ↔ servidor |
 
 ---
 
 ## Pedidos (`/api/orders`)
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/orders/user/<user_id>` | Lista pedidos do usuário |
-| GET | `/api/orders/<order_id>` | Detalhe do pedido |
-| POST | `/api/orders/user/<user_id>` | Cria pedido |
-| PUT | `/api/orders/<order_id>/status` | Atualiza status |
-| POST | `/api/orders/<order_id>/cancel` | Cancela pedido |
+Exige **JWT**. Listar/criar por usuário: dono da URL ou admin (👤). Ver/cancelar um pedido: dono do pedido ou admin. Atualizar status: **admin** (👑).
+
+| Método | Rota | Auth | Descrição |
+|--------|------|------|-----------|
+| GET | `/api/orders/user/<user_id>` | 👤 | Lista pedidos do usuário |
+| GET | `/api/orders/<order_id>` | 👤 | Detalhe do pedido (dono ou admin) |
+| POST | `/api/orders/user/<user_id>` | 👤 | Cria pedido |
+| PUT | `/api/orders/<order_id>/status` | 👑 | Atualiza status |
+| POST | `/api/orders/<order_id>/cancel` | 👤 | Cancela pedido (dono ou admin) |
 
 **Criação — `POST /api/orders/user/<user_id>`**
 ```json

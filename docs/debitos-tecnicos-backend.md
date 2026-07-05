@@ -25,16 +25,16 @@ mobile** (os clientes continuam funcionando), com a suíte `pytest` verde
 
 | Item | Status | Observação |
 |------|--------|------------|
-| 1 — Autorização | 🟡 parcial | **Feito:** escrita de `categories` agora exige `@admin_required`. **Pendente:** JWT em `cart`/`orders`/`favorites` (quebra o mobile, que hoje nem tem JWT real — precisa de PR coordenado nos 3 apps). |
+| 1 — Autorização | 🟢 feito | `cart`, `orders` e `favorites` agora exigem **JWT** com identidade em `g.user_id` (dono-ou-admin); `X-User-Id`/`require_auth` removidos; escrita de `categories` exige admin. Corrigidos 2 bugs str-vs-int (`owner_or_admin_required` e `refresh_access_token`). Coordenado com mobile (JWT real) e frontend (Pedidos/Checkout via axios). |
 | 2 — Envelope de resposta | 🔴 pendente | Muda o corpo consumido por frontend/mobile; exige varredura conjunta. Não iniciado. |
 | 3 — Boilerplate (`@require_db` + errorhandler) | 🟢 feito | Criado `@require_db` (`app/utils/decorators.py`) e `@app.errorhandler(Exception)` central. `try/except` genérico removido de `cart`/`orders`; **mantido** em `users`/`images` por serem fluxos sensíveis (o handler central já é a rede de segurança). |
 | 4 — Duplicação de infraestrutura | 🟢 feito | Extraídos `serialize_doc`, `next_sequence`, `get_pagination_params` e `_render_email` para `app/utils/`. `favorites` mantém `_id`→string (divergência do item 4 deixada para o PR do envelope). |
 
-> **Bloqueador do item 1 descoberto na implementação:** o app **mobile não usa
-> JWT real** — grava a string literal `'authenticated'` e nunca envia
-> `Authorization`. Exigir `@jwt_required` em cart/orders/favorites quebra o
-> mobile até um overhaul do auth dele. Por isso o núcleo do item 1 permanece
-> como PR coordenado, e não foi aplicado aqui.
+> **Item 1 — coordenação de 3 apps.** O mobile não tinha JWT real (gravava a
+> string `'authenticated'`); foi refeito para armazenar/enviar o token
+> (`feat(mobile): usa JWT real`). O frontend migrou Pedidos/Checkout para a
+> instância axios que injeta o Bearer. Só então o backend passou a exigir JWT
+> nesses fluxos. Ordem de deploy: publicar clientes antes do backend.
 
 ---
 

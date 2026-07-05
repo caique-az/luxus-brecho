@@ -41,9 +41,10 @@ Roteamento é o Expo Router: criar `app/nome.tsx` cria a rota `/nome`; `app/(tab
 
 ## Autenticação
 
-- Rotas de usuário e escrita de produtos **e de categorias** usam **JWT** (`Authorization: Bearer`). Aplique os decorators existentes: `@jwt_required`, `@admin_required`, `@owner_or_admin_required('id')`.
+- **Todos** os recursos protegidos usam **JWT** (`Authorization: Bearer`) — usuários, escrita de produtos e categorias, e agora também carrinho, pedidos e favoritos. Aplique os decorators existentes: `@jwt_required`, `@admin_required`, `@owner_or_admin_required('<param>')`. A identidade do dono vem sempre de **`g.user_id`** (token), nunca de parâmetro de URL ou header.
 - Toda função de controller que acessa o banco deve usar o decorator **`@require_db`** (`app/utils/decorators.py`), que padroniza o 503 quando `current_app.db is None`. Não reimplemente a guarda `if db is None` à mão.
-- Favoritos ainda usam o header **`X-User-Id`** (decorator `require_auth` local do controller). Esse esquema é **forjável** e está marcado para migração ao JWT (ver [débitos técnicos](./debitos-tecnicos-backend.md), item 1). Não o use como referência para novos recursos — prefira os decorators JWT.
+- `g.user_id` é **int** (recuperado de `sub`). Coleções que guardam id int (users/carts/orders) casam direto; favoritos guardam `user_id` como string por legado, então o controller usa `str(g.user_id)`.
+- O antigo header `X-User-Id` de favoritos foi **removido** — não use esse esquema; era forjável.
 - Nunca logue tokens nem senhas. `JWT_SECRET_KEY` e credenciais ficam em `.env` (nunca commitados).
 
 ## Testes

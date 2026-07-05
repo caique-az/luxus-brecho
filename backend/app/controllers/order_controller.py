@@ -1,7 +1,7 @@
 """
 Controller para gerenciamento de pedidos.
 """
-from flask import jsonify, request, current_app
+from flask import jsonify, request, current_app, g
 from datetime import datetime
 from typing import Dict, Any
 
@@ -15,6 +15,11 @@ from ..models.order_model import (
 from ..models.cart_model import get_collection as get_cart_collection
 from ..utils.pagination import get_pagination_params
 from ..utils.decorators import require_db
+
+
+def _order_access_denied(order: Dict[str, Any]) -> bool:
+    """True se o usuário do token não é dono do pedido nem administrador."""
+    return order.get("user_id") != g.user_id and g.user_type != "Administrador"
 
 
 @require_db
@@ -57,6 +62,9 @@ def get_order_by_id(order_id: int):
 
     if not order:
         return jsonify(message="Pedido não encontrado"), 404
+
+    if _order_access_denied(order):
+        return jsonify(message="Acesso negado"), 403
 
     return jsonify(normalize_order(order))
 
@@ -226,6 +234,9 @@ def cancel_order(order_id: int):
     order = coll.find_one({"id": order_id})
     if not order:
         return jsonify(message="Pedido não encontrado"), 404
+
+    if _order_access_denied(order):
+        return jsonify(message="Acesso negado"), 403
 
     if order.get("status") == "cancelado":
         return jsonify(message="Pedido já está cancelado"), 400
