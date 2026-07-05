@@ -302,6 +302,28 @@ def mock_db(app):
 
 
 @pytest.fixture
+def auth_headers():
+    """Factory de headers Authorization com um JWT válido.
+
+    As rotas protegidas (@admin_required / @owner_or_admin_required) exigem um
+    Bearer token; os testes de integração usam esta factory para autenticar.
+    """
+    from app.services.jwt_service import create_access_token
+
+    def _make(user_id=1, tipo="Cliente", email="user@test.com"):
+        token = create_access_token(user_id, tipo, email)
+        return {"Authorization": f"Bearer {token}"}
+
+    return _make
+
+
+@pytest.fixture
+def admin_headers(auth_headers):
+    """Headers de um administrador — passa em @admin_required."""
+    return auth_headers(user_id=99, tipo="Administrador", email="admin@test.com")
+
+
+@pytest.fixture
 def sample_user():
     """Retorna dados de usuário de exemplo."""
     return {

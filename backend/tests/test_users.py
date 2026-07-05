@@ -9,10 +9,10 @@ from datetime import datetime
 class TestUsersList:
     """Testes para listagem de usuários."""
     
-    def test_list_users_empty(self, client, mock_db):
-        """Testa listagem quando não há usuários."""
-        response = client.get("/api/users")
-        
+    def test_list_users_empty(self, client, mock_db, admin_headers):
+        """Testa listagem quando não há usuários (rota exige admin)."""
+        response = client.get("/api/users", headers=admin_headers)
+
         assert response.status_code == 200
         data = response.get_json()
         
@@ -20,12 +20,12 @@ class TestUsersList:
         assert "items" in data
         assert "pagination" in data
     
-    def test_list_users_with_data(self, client, mock_db, sample_user):
-        """Testa listagem com usuários cadastrados."""
+    def test_list_users_with_data(self, client, mock_db, sample_user, admin_headers):
+        """Testa listagem com usuários cadastrados (rota exige admin)."""
         mock_db["users"].insert_one(sample_user)
-        
-        response = client.get("/api/users")
-        
+
+        response = client.get("/api/users", headers=admin_headers)
+
         assert response.status_code == 200
 
 
@@ -105,78 +105,84 @@ class TestUserCreate:
 class TestUserGet:
     """Testes para obter usuário específico."""
     
-    def test_get_user_by_id(self, client, mock_db, sample_user):
-        """Testa obter usuário por ID."""
+    def test_get_user_by_id(self, client, mock_db, sample_user, auth_headers):
+        """Testa obter usuário por ID (o próprio dono acessa seu perfil)."""
         mock_db["users"].insert_one(sample_user)
-        
-        response = client.get(f"/api/users/{sample_user['id']}")
-        
+
+        owner = auth_headers(user_id=sample_user["id"], email=sample_user["email"])
+        response = client.get(f"/api/users/{sample_user['id']}", headers=owner)
+
         assert response.status_code == 200
         data = response.get_json()
         
         assert data["id"] == sample_user["id"]
         assert data["nome"] == sample_user["nome"]
     
-    def test_get_user_not_found(self, client, mock_db):
-        """Testa obter usuário inexistente."""
-        response = client.get("/api/users/99999")
-        
+    def test_get_user_not_found(self, client, mock_db, admin_headers):
+        """Testa obter usuário inexistente (admin ignora a checagem de posse)."""
+        response = client.get("/api/users/99999", headers=admin_headers)
+
         assert response.status_code == 404
 
 
 class TestUserUpdate:
     """Testes para atualização de usuários."""
     
-    def test_update_user_success(self, client, mock_db, sample_user):
-        """Testa atualização de usuário com sucesso."""
+    def test_update_user_success(self, client, mock_db, sample_user, auth_headers):
+        """Testa atualização de usuário com sucesso (o próprio dono atualiza)."""
         mock_db["users"].insert_one(sample_user)
-        
+
         update_data = {
             "nome": "Nome Atualizado",
             "email": sample_user["email"],
             "tipo": sample_user["tipo"],
         }
-        
+
+        owner = auth_headers(user_id=sample_user["id"], email=sample_user["email"])
         response = client.put(
             f"/api/users/{sample_user['id']}",
             data=json.dumps(update_data),
-            content_type="application/json"
+            content_type="application/json",
+            headers=owner,
         )
-        
+
         assert response.status_code == 200
     
-    def test_update_user_not_found(self, client, mock_db):
-        """Testa atualização de usuário inexistente."""
+    def test_update_user_not_found(self, client, mock_db, admin_headers):
+        """Testa atualização de usuário inexistente (admin)."""
         update_data = {
             "nome": "Nome Atualizado",
             "email": "test@test.com",
             "tipo": "Cliente",
         }
-        
+
         response = client.put(
             "/api/users/99999",
             data=json.dumps(update_data),
-            content_type="application/json"
+            content_type="application/json",
+            headers=admin_headers,
         )
-        
+
         assert response.status_code == 404
 
 
 class TestUserDelete:
     """Testes para exclusão de usuários."""
     
-    def test_delete_user_success(self, client, mock_db, sample_user):
-        """Testa exclusão (soft delete) de usuário."""
+    def test_delete_user_success(self, client, mock_db, sample_user, admin_headers):
+        """Testa exclusão (soft delete) de usuário (rota exige admin)."""
         mock_db["users"].insert_one(sample_user)
-        
-        response = client.delete(f"/api/users/{sample_user['id']}")
-        
+
+        response = client.delete(
+            f"/api/users/{sample_user['id']}", headers=admin_headers
+        )
+
         assert response.status_code == 200
     
-    def test_delete_user_not_found(self, client, mock_db):
-        """Testa exclusão de usuário inexistente."""
-        response = client.delete("/api/users/99999")
-        
+    def test_delete_user_not_found(self, client, mock_db, admin_headers):
+        """Testa exclusão de usuário inexistente (rota exige admin)."""
+        response = client.delete("/api/users/99999", headers=admin_headers)
+
         assert response.status_code == 404
 
 
