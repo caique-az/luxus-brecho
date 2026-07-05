@@ -29,7 +29,9 @@ export interface AuthResponse {
   user: User;
 }
 
-const AUTH_TOKEN_KEY = '@luxus_brecho:auth_token';
+const AUTH_TOKEN_KEY = '@luxus_brecho:auth_token'; // legado (só removido no logout)
+const ACCESS_TOKEN_KEY = '@luxus_brecho:access_token';
+const REFRESH_TOKEN_KEY = '@luxus_brecho:refresh_token';
 const USER_DATA_KEY = '@luxus_brecho:user_data';
 
 class AuthService {
@@ -64,12 +66,17 @@ class AuthService {
       }
 
       if (data && data.user) {
-        // Salvar dados do usuário no AsyncStorage
+        // Salvar dados do usuário e os tokens JWT reais devolvidos pelo backend
         await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(data.user));
-        await AsyncStorage.setItem(AUTH_TOKEN_KEY, 'authenticated');
-        
+        if (data.access_token) {
+          await AsyncStorage.setItem(ACCESS_TOKEN_KEY, data.access_token);
+        }
+        if (data.refresh_token) {
+          await AsyncStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
+        }
+
         this.currentUser = data.user;
-        
+
         return { success: true, user: data.user };
       }
 
@@ -162,8 +169,12 @@ class AuthService {
    */
   async logout(): Promise<void> {
     try {
-      await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
-      await AsyncStorage.removeItem(USER_DATA_KEY);
+      await AsyncStorage.multiRemove([
+        AUTH_TOKEN_KEY,
+        ACCESS_TOKEN_KEY,
+        REFRESH_TOKEN_KEY,
+        USER_DATA_KEY,
+      ]);
       this.currentUser = null;
     } catch (error) {
       console.error('Erro no logout:', error);
@@ -171,15 +182,74 @@ class AuthService {
   }
 
   /**
-   * Verifica se o usuário está autenticado
+   * Verifica se o usuário está autenticado (há sessão salva).
+   * Baseia-se nos dados do usuário para não deslogar sessões legadas que
+   * ainda não possuem o token JWT armazenado.
    */
   async isAuthenticated(): Promise<boolean> {
     try {
-      const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
-      return token !== null;
+      const userData = await AsyncStorage.getItem(USER_DATA_KEY);
+      return userData !== null;
     } catch (error) {
       console.error('Erro ao verificar autenticação:', error);
       return false;
+    }
+  }
+
+  /**
+   * Retorna o access token JWT armazenado (ou null).
+   */
+  async getAccessToken(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+    } catch (error) {
+      console.error('Erro ao obter access token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Monta o header Authorization com o Bearer token, se houver.
+   * Retorna objeto vazio quando não há token (sessão legada / não logado).
+   */
+  async getAuthHeaders(): Promise<Record<string, string>> {
+    const token = await this.getAccessToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  /**
+   * Renova o access token usando o refresh token armazenado.
+   * Retorna o novo access token, ou null se não for possível renovar.
+   */
+  async refreshAccessToken(): Promise<string | null> {
+    try {
+      const refreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
+      if (!refreshToken) {
+        return null;
+      }
+
+      const response = await fetch(`${getApiUrl()}/users/refresh-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      if (data?.access_token) {
+        await AsyncStorage.setItem(ACCESS_TOKEN_KEY, data.access_token);
+        if (data.refresh_token) {
+          await AsyncStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
+        }
+        return data.access_token;
+      }
+      return null;
+    } catch (error) {
+      console.error('Erro ao renovar token:', error);
+      return null;
     }
   }
 

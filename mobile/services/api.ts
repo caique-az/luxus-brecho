@@ -3,6 +3,7 @@ import { Category, CategoryResponse } from '../types/category';
 import { cacheManager } from '../utils/cache';
 import { getApiUrl, getNetworkInfo } from '../utils/networkUtils';
 import { CONFIG } from '../constants/config';
+import { authService } from './auth';
 
 // URL da API detectada automaticamente
 const API_BASE_URL = getApiUrl();
@@ -31,8 +32,8 @@ class ApiService {
   private initialDelay = CONFIG.API.INITIAL_DELAY;
 
   private async fetchApi<T>(
-    endpoint: string, 
-    options?: RequestInit & { useCache?: boolean; cacheMinutes?: number },
+    endpoint: string,
+    options?: RequestInit & { useCache?: boolean; cacheMinutes?: number; _authRetried?: boolean },
     retryCount = 0
   ): Promise<T> {
     const controller = new AbortController();
@@ -61,19 +62,36 @@ class ApiService {
         console.log(`🔗 API Request: ${API_BASE_URL}${endpoint} (timeout: ${this.timeout}ms)`);
       }
       
+      // Injeta o Bearer token quando há sessão. Preserva o contrato de headers:
+      // se o chamador passa `headers` (ex.: FormData com headers: {} para não
+      // forçar Content-Type), respeita-o e só acrescenta o Authorization.
+      const authHeaders = await authService.getAuthHeaders();
+      const optionHeaders = options?.headers as Record<string, string> | undefined;
+      const finalHeaders: Record<string, string> = optionHeaders
+        ? { ...authHeaders, ...optionHeaders }
+        : {
+            'Content-Type': 'application/json',
+            'Accept-Encoding': 'gzip, deflate',
+            'X-Client-Version': '1.0.0',
+            ...authHeaders,
+          };
+
       const startTime = Date.now();
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept-Encoding': 'gzip, deflate',
-          'X-Client-Version': '1.0.0',
-          ...options?.headers,
-        },
-        signal: controller.signal,
         ...options,
+        headers: finalHeaders,
+        signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
+
+      // Token expirado/inválido: tenta renovar uma vez e refaz a requisição.
+      if (response.status === 401 && !options?._authRetried) {
+        const newToken = await authService.refreshAccessToken();
+        if (newToken) {
+          return this.fetchApi<T>(endpoint, { ...options, _authRetried: true }, retryCount);
+        }
+      }
 
       if (!response.ok) {
         const errorData = await response.text().catch(() => 'Unknown error');

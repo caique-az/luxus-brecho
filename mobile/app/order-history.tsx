@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
 import { getApiUrl } from '../utils/networkUtils';
+import { authService } from '../services/auth';
 
 interface OrderItem {
   product_id: number;
@@ -62,9 +63,11 @@ export default function OrderHistoryScreen() {
     if (!user) return;
 
     try {
-      const response = await fetch(`${getApiUrl()}/orders/user/${user.id}`);
+      const response = await fetch(`${getApiUrl()}/orders/user/${user.id}`, {
+        headers: await authService.getAuthHeaders(),
+      });
       const data = await response.json();
-      
+
       if (response.ok) {
         setOrders(data.orders || []);
       }

@@ -16,6 +16,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { getApiUrl } from '../utils/networkUtils';
+import { authService } from '../services/auth';
 import ConfirmModal from '../components/ui/ConfirmModal';
 
 interface Address {
@@ -63,7 +64,9 @@ export default function CheckoutScreen() {
     
     try {
       // Tenta carregar endereço salvo do usuário
-      const response = await fetch(`${getApiUrl()}/users/${user.id}`);
+      const response = await fetch(`${getApiUrl()}/users/${user.id}`, {
+        headers: await authService.getAuthHeaders(),
+      });
       const data = await response.json();
       
       if (response.ok && data.endereco) {
@@ -115,7 +118,7 @@ export default function CheckoutScreen() {
     try {
       const response = await fetch(`${getApiUrl()}/orders/user/${user.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authService.getAuthHeaders()) },
         body: JSON.stringify({
           items: itemsParam,
           endereco: address,

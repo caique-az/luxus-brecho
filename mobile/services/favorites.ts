@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiUrl } from '../utils/networkUtils';
 import { CONFIG } from '../constants/config';
+import { authService } from './auth';
 
 const API_BASE_URL = getApiUrl();
 
@@ -34,9 +35,11 @@ const fetchWithUserId = async (
     throw new Error('Usuário não autenticado');
   }
 
+  const authHeaders = await authService.getAuthHeaders();
   const headers = {
     'Content-Type': 'application/json',
     'X-User-Id': userId,
+    ...authHeaders,
     ...options.headers,
   };
 
