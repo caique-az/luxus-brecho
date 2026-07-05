@@ -142,9 +142,31 @@ class MockCollection:
         else:
             result.matched_count = 0
             result.modified_count = 0
-        
+
         return result
-    
+
+    def update_many(self, query, update, upsert=False):
+        matched = list(self.find(query))
+        result = MagicMock()
+        for doc in matched:
+            if "$set" in update:
+                doc.update(update["$set"])
+            if "$inc" in update:
+                for key, value in update["$inc"].items():
+                    doc[key] = doc.get(key, 0) + value
+            if "$push" in update:
+                for key, value in update["$push"].items():
+                    doc.setdefault(key, []).append(value)
+            if "$pull" in update:
+                for key, value in update["$pull"].items():
+                    if key in doc:
+                        doc[key] = [item for item in doc[key] if not all(
+                            item.get(k) == v for k, v in value.items()
+                        )]
+        result.matched_count = len(matched)
+        result.modified_count = len(matched)
+        return result
+
     def find_one_and_update(self, query, update, upsert=False, return_document=None):
         doc = self.find_one(query)
         
