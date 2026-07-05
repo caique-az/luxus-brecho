@@ -43,8 +43,8 @@ Roteamento é o Expo Router: criar `app/nome.tsx` cria a rota `/nome`; `app/(tab
 
 - **Todos** os recursos protegidos usam **JWT** (`Authorization: Bearer`) — usuários, escrita de produtos e categorias, e agora também carrinho, pedidos e favoritos. Aplique os decorators existentes: `@jwt_required`, `@admin_required`, `@owner_or_admin_required('<param>')`. A identidade do dono vem sempre de **`g.user_id`** (token), nunca de parâmetro de URL ou header.
 - Toda função de controller que acessa o banco deve usar o decorator **`@require_db`** (`app/utils/decorators.py`), que padroniza o 503 quando `current_app.db is None`. Não reimplemente a guarda `if db is None` à mão.
-- `g.user_id` é **int** (recuperado de `sub`). Coleções que guardam id int (users/carts/orders) casam direto; favoritos guardam `user_id` como string por legado, então o controller usa `str(g.user_id)`.
-- O antigo header `X-User-Id` de favoritos foi **removido** — não use esse esquema; era forjável.
+- `g.user_id` é **int** (recuperado de `sub`) e é usado direto em todas as coleções (users/carts/orders/favorites), que guardam id int.
+- O antigo header `X-User-Id` de favoritos foi **removido** — não use esse esquema; era forjável. Favoritos legados gravados com `user_id` string precisam de migração string→int à parte.
 - Nunca logue tokens nem senhas. `JWT_SECRET_KEY` e credenciais ficam em `.env` (nunca commitados).
 
 ## Testes

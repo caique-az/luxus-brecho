@@ -1,7 +1,6 @@
 """
 Testes para rotas de favoritos.
-Exigem JWT (Authorization: Bearer); a identidade vem do token (id=1).
-Favoritos guardam user_id como string ("1"), casando com str(g.user_id).
+Exigem JWT (Authorization: Bearer); a identidade vem do token (g.user_id int, id=1).
 """
 import pytest
 import json
@@ -21,7 +20,7 @@ class TestFavoritesList:
         """Testa listagem com favoritos cadastrados."""
         mock_db["products"].insert_one(sample_product)
         mock_db["favorites"].insert_one({
-            "user_id": "1",
+            "user_id": 1,
             "product_id": sample_product["id"],
             "created_at": datetime.utcnow(),
         })
@@ -57,7 +56,7 @@ class TestFavoriteAdd:
         """Testa adicionar favorito duplicado."""
         mock_db["products"].insert_one(sample_product)
         mock_db["favorites"].insert_one({
-            "user_id": "1",
+            "user_id": 1,
             "product_id": sample_product["id"],
             "created_at": datetime.utcnow(),
         })
@@ -113,7 +112,7 @@ class TestFavoriteRemove:
         """Testa remover produto dos favoritos."""
         mock_db["products"].insert_one(sample_product)
         mock_db["favorites"].insert_one({
-            "user_id": "1",
+            "user_id": 1,
             "product_id": sample_product["id"],
             "created_at": datetime.utcnow(),
         })
@@ -158,7 +157,7 @@ class TestFavoriteToggle:
         """Testa toggle quando produto já é favorito."""
         mock_db["products"].insert_one(sample_product)
         mock_db["favorites"].insert_one({
-            "user_id": "1",
+            "user_id": 1,
             "product_id": sample_product["id"],
             "created_at": datetime.utcnow(),
         })
@@ -186,7 +185,7 @@ class TestFavoriteCheck:
         """Testa verificação quando é favorito."""
         mock_db["products"].insert_one(sample_product)
         mock_db["favorites"].insert_one({
-            "user_id": "1",
+            "user_id": 1,
             "product_id": sample_product["id"],
             "created_at": datetime.utcnow(),
         })

@@ -1,6 +1,7 @@
 """
 Controller para gerenciar favoritos dos usuários.
-A identidade vem do JWT (``g.user_id``); as rotas aplicam ``@jwt_required``.
+A identidade vem do JWT (``g.user_id``, int); as rotas aplicam ``@jwt_required``
+e repassam ``g.user_id`` como ``user_id``.
 Endpoints:
 - GET /favorites - Lista favoritos do usuário autenticado
 - POST /favorites - Adiciona produto aos favoritos
@@ -8,7 +9,7 @@ Endpoints:
 - GET /favorites/check/<product_id> - Verifica se produto está favoritado
 - POST /favorites/toggle - Alterna favorito
 """
-from flask import request, jsonify, current_app, g
+from flask import request, jsonify, current_app
 from typing import Any, Dict
 
 from ..models.favorite_model import (
@@ -34,21 +35,10 @@ def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
     return d
 
 
-def _current_user_id() -> str:
-    """Id do usuário autenticado no formato usado pela coleção de favoritos.
-
-    Favoritos foram historicamente gravados com ``user_id`` string (vindo do
-    antigo header ``X-User-Id``). Mantemos string aqui — ``str(g.user_id)`` —
-    para casar com os registros legados sem exigir migração.
-    """
-    return str(g.user_id)
-
-
 @require_db
-def list_user_favorites():
+def list_user_favorites(user_id: int):
     """Lista todos os favoritos do usuário autenticado com detalhes dos produtos."""
     db = current_app.db
-    user_id = _current_user_id()
 
     # Buscar favoritos
     success, error, favorites = get_user_favorites(db, user_id)
@@ -84,14 +74,13 @@ def list_user_favorites():
 
 
 @require_db
-def add_to_favorites():
+def add_to_favorites(user_id: int):
     """Adiciona um produto aos favoritos do usuário autenticado.
 
     POST /favorites
     Body: { "product_id": 123 }
     """
     db = current_app.db
-    user_id = _current_user_id()
 
     # Validar payload
     payload = request.get_json()
@@ -126,13 +115,12 @@ def add_to_favorites():
 
 
 @require_db
-def remove_from_favorites(product_id: int):
+def remove_from_favorites(user_id: int, product_id: int):
     """Remove um produto dos favoritos do usuário autenticado.
 
     DELETE /favorites/<product_id>
     """
     db = current_app.db
-    user_id = _current_user_id()
 
     # Remover favorito
     success, error = remove_favorite(db, user_id, product_id)
@@ -146,13 +134,12 @@ def remove_from_favorites(product_id: int):
 
 
 @require_db
-def check_favorite(product_id: int):
+def check_favorite(user_id: int, product_id: int):
     """Verifica se um produto está nos favoritos do usuário autenticado.
 
     GET /favorites/check/<product_id>
     """
     db = current_app.db
-    user_id = _current_user_id()
 
     # Verificar se está favoritado
     favorited = is_favorited(db, user_id, product_id)
@@ -161,14 +148,13 @@ def check_favorite(product_id: int):
 
 
 @require_db
-def toggle_favorite():
+def toggle_favorite(user_id: int):
     """Alterna o estado de favorito (adiciona se não existe, remove se existe).
 
     POST /favorites/toggle
     Body: { "product_id": 123 }
     """
     db = current_app.db
-    user_id = _current_user_id()
 
     # Validar payload
     payload = request.get_json()
