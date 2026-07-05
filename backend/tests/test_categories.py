@@ -36,53 +36,56 @@ class TestCategoriesList:
 class TestCategoryCreate:
     """Testes para criação de categorias."""
     
-    def test_create_category_success(self, client, mock_db):
+    def test_create_category_success(self, client, mock_db, admin_headers):
         """Testa criação de categoria com sucesso."""
         mock_db["counters"].insert_one({"name": "categories", "seq": 0})
-        
+
         category_data = {
             "name": "Nova Categoria",
             "description": "Descrição da categoria",
         }
-        
+
         response = client.post(
             "/api/categories",
             data=json.dumps(category_data),
-            content_type="application/json"
+            content_type="application/json",
+            headers=admin_headers
         )
-        
+
         assert response.status_code in [200, 201]
     
-    def test_create_category_missing_name(self, client, mock_db):
+    def test_create_category_missing_name(self, client, mock_db, admin_headers):
         """Testa criação sem nome."""
         category_data = {
             "description": "Descrição sem nome",
         }
-        
+
         response = client.post(
             "/api/categories",
             data=json.dumps(category_data),
-            content_type="application/json"
+            content_type="application/json",
+            headers=admin_headers
         )
-        
+
         assert response.status_code == 400
     
-    def test_create_category_duplicate_name(self, client, mock_db, sample_category):
+    def test_create_category_duplicate_name(self, client, mock_db, sample_category, admin_headers):
         """Testa criação com nome duplicado."""
         mock_db["categories"].insert_one(sample_category)
         mock_db["counters"].insert_one({"name": "categories", "seq": 1})
-        
+
         category_data = {
             "name": sample_category["name"],
             "description": "Outra descrição",
         }
-        
+
         response = client.post(
             "/api/categories",
             data=json.dumps(category_data),
-            content_type="application/json"
+            content_type="application/json",
+            headers=admin_headers
         )
-        
+
         # Deve retornar erro de duplicado
         assert response.status_code == 409
 
@@ -112,51 +115,109 @@ class TestCategoryGet:
 class TestCategoryUpdate:
     """Testes para atualização de categorias."""
     
-    def test_update_category_success(self, client, mock_db, sample_category):
+    def test_update_category_success(self, client, mock_db, sample_category, admin_headers):
         """Testa atualização de categoria com sucesso."""
         mock_db["categories"].insert_one(sample_category)
-        
+
         update_data = {
             "name": "Categoria Atualizada",
             "description": "Nova descrição",
         }
-        
+
         response = client.put(
             f"/api/categories/{sample_category['id']}",
             data=json.dumps(update_data),
-            content_type="application/json"
+            content_type="application/json",
+            headers=admin_headers
         )
-        
+
         assert response.status_code == 200
     
-    def test_update_category_not_found(self, client, mock_db):
+    def test_update_category_not_found(self, client, mock_db, admin_headers):
         """Testa atualização de categoria inexistente."""
         update_data = {
             "name": "Categoria Atualizada",
         }
-        
+
         response = client.put(
             "/api/categories/99999",
             data=json.dumps(update_data),
-            content_type="application/json"
+            content_type="application/json",
+            headers=admin_headers
         )
-        
+
         assert response.status_code == 404
 
 
 class TestCategoryDelete:
     """Testes para exclusão de categorias."""
     
-    def test_delete_category_success(self, client, mock_db, sample_category):
+    def test_delete_category_success(self, client, mock_db, sample_category, admin_headers):
         """Testa exclusão de categoria."""
         mock_db["categories"].insert_one(sample_category)
-        
-        response = client.delete(f"/api/categories/{sample_category['id']}")
-        
+
+        response = client.delete(
+            f"/api/categories/{sample_category['id']}",
+            headers=admin_headers
+        )
+
         assert response.status_code == 200
     
-    def test_delete_category_not_found(self, client, mock_db):
+    def test_delete_category_not_found(self, client, mock_db, admin_headers):
         """Testa exclusão de categoria inexistente."""
-        response = client.delete("/api/categories/99999")
-        
+        response = client.delete(
+            "/api/categories/99999",
+            headers=admin_headers
+        )
+
         assert response.status_code == 404
+
+
+class TestCategoryWriteAuthorization:
+    """Escrita de categoria deve exigir administrador (mesmo critério de produtos)."""
+
+    def test_create_requires_authentication(self, client, mock_db):
+        """Sem token, POST /categories retorna 401."""
+        response = client.post(
+            "/api/categories",
+            data=json.dumps({"name": "X", "description": "descrição"}),
+            content_type="application/json"
+        )
+
+        assert response.status_code == 401
+
+    def test_create_forbidden_for_client(self, client, mock_db, auth_headers):
+        """Com token de Cliente, POST /categories retorna 403."""
+        response = client.post(
+            "/api/categories",
+            data=json.dumps({"name": "X", "description": "descrição"}),
+            content_type="application/json",
+            headers=auth_headers
+        )
+
+        assert response.status_code == 403
+
+    def test_update_requires_authentication(self, client, mock_db, sample_category):
+        """Sem token, PUT /categories/<id> retorna 401."""
+        mock_db["categories"].insert_one(sample_category)
+        response = client.put(
+            f"/api/categories/{sample_category['id']}",
+            data=json.dumps({"name": "Y"}),
+            content_type="application/json"
+        )
+
+        assert response.status_code == 401
+
+    def test_delete_requires_authentication(self, client, mock_db, sample_category):
+        """Sem token, DELETE /categories/<id> retorna 401."""
+        mock_db["categories"].insert_one(sample_category)
+        response = client.delete(f"/api/categories/{sample_category['id']}")
+
+        assert response.status_code == 401
+
+    def test_read_stays_public(self, client, mock_db, sample_category):
+        """Leitura continua pública (sem token)."""
+        mock_db["categories"].insert_one(sample_category)
+        response = client.get("/api/categories")
+
+        assert response.status_code == 200

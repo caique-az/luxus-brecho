@@ -8,16 +8,17 @@ from app.controllers.categories_controller import (
     activate_category,
     get_categories_summary,
 )
+from app.services.jwt_service import admin_required
 
 categories_bp = Blueprint("categories", __name__)
 
-# CRUD básico
+# Leitura pública
 categories_bp.route("/", methods=["GET"])(list_categories)
 categories_bp.route("/<int:id>", methods=["GET"])(get_category)
-categories_bp.route("/", methods=["POST"])(create_category)
-categories_bp.route("/<int:id>", methods=["PUT"])(update_category)
-categories_bp.route("/<int:id>", methods=["DELETE"])(delete_category)
-
-# Operações especiais
-categories_bp.route("/<int:id>/activate", methods=["PUT"])(activate_category)
 categories_bp.route("/summary", methods=["GET"])(get_categories_summary)
+
+# Escrita restrita a administradores (mesmo critério do CRUD de produtos)
+categories_bp.route("/", methods=["POST"])(admin_required(create_category))
+categories_bp.route("/<int:id>", methods=["PUT"])(admin_required(update_category))
+categories_bp.route("/<int:id>", methods=["DELETE"])(admin_required(delete_category))
+categories_bp.route("/<int:id>/activate", methods=["PUT"])(admin_required(activate_category))

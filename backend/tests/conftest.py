@@ -318,6 +318,22 @@ def mock_db(app):
 
 
 @pytest.fixture
+def admin_headers():
+    """Header Authorization com um JWT de administrador válido."""
+    from app.services.jwt_service import create_access_token
+    token = create_access_token(user_id=999, user_type="Administrador", email="admin@teste.com")
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def auth_headers():
+    """Header Authorization com um JWT de cliente válido (id=1)."""
+    from app.services.jwt_service import create_access_token
+    token = create_access_token(user_id=1, user_type="Cliente", email="teste@email.com")
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
 def sample_user():
     """Retorna dados de usuário de exemplo."""
     return {
