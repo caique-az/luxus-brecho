@@ -4,6 +4,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useCartStore } from '../../store/cartStore';
 import { useToastContext } from '../../contexts/ToastContext';
 import { buscarCep } from '../../services/cep';
+import api from '../../services/api';
 import ConfirmModal from '../../components/ConfirmModal';
 import { 
   FiArrowLeft, 
@@ -13,8 +14,6 @@ import {
   FiPackage
 } from 'react-icons/fi';
 import './index.css';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -55,10 +54,9 @@ const Checkout = () => {
     if (!user) return;
     
     try {
-      const response = await fetch(`${API_URL}/users/${user.id}`);
-      const data = await response.json();
-      
-      if (response.ok && data.endereco) {
+      const { data } = await api.get(`/users/${user.id}`);
+
+      if (data.endereco) {
         setAddress({
           rua: data.endereco.rua || '',
           numero: data.endereco.numero || '',
@@ -138,26 +136,16 @@ const Checkout = () => {
         imagem_url: item.product?.imagem_url || item.imagem_url,
       }));
 
-      const response = await fetch(`${API_URL}/orders/user/${user.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: orderItems,
-          endereco: address,
-        }),
+      await api.post(`/orders/user/${user.id}`, {
+        items: orderItems,
+        endereco: address,
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        clearCart();
-        setShowSuccessModal(true);
-      } else {
-        showError(data.message || 'Erro ao criar pedido');
-      }
+      clearCart();
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Erro ao criar pedido:', error);
-      showError('Erro de conexão. Tente novamente.');
+      showError(error.response?.data?.message || 'Erro de conexão. Tente novamente.');
     } finally {
       setLoading(false);
     }
