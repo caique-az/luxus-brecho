@@ -1,92 +1,72 @@
 # Luxus Brechó 🛍️
 
-Plataforma fullstack para brechó online com **Backend Flask**, **Frontend React** e **App Mobile Expo/React Native**.
-
-## 📌 Visão Geral
+Plataforma fullstack de e-commerce de brechó, onde cada produto é uma **peça única**. Um backend Flask serve a API REST consumida por dois clientes independentes: uma loja web (React) e um app mobile (Expo/React Native).
 
 | Camada | Stack |
 |--------|-------|
-| **Backend** | Python 3.10+, Flask, MongoDB, JWT Auth |
-| **Frontend** | React 19, Vite 6, Zustand, Vitest |
-| **Mobile** | Expo 54, React Native, TypeScript, NativeWind |
+| **Backend** | Python 3.10+ · Flask · MongoDB · JWT · Supabase Storage |
+| **Frontend** | React 19 · Vite 6 · Zustand · Zod · Vitest |
+| **Mobile** | Expo 49 · React Native · TypeScript · Expo Router · NativeWind |
 
-## 🚀 Início Rápido
+## Visão geral
+
+```
+luxus-brecho/
+├─ backend/    API Flask + MongoDB — fonte única de verdade
+├─ frontend/   Loja web (SPA) + painel administrativo
+├─ mobile/     App da loja para Android/iOS
+└─ docs/       Documentação técnica
+```
+
+O backend concentra toda a regra de negócio e autenticação; web e mobile são clientes que conversam apenas com o contrato da API. Entenda o desenho completo em **[docs/arquitetura.md](./docs/arquitetura.md)**.
+
+## Início rápido
 
 ```bash
-# Clone o repositório
-git clone https://github.com/your-username/luxus-brecho.git
-cd luxus-brecho
-
 # Backend
 cd backend && pip install -r requirements.txt
-cp .env.example .env  # Configure as variáveis
-python run.py         # http://localhost:5000/api
+cp .env.example .env          # configure as variáveis
+python run.py                 # http://localhost:5000/api
 
 # Frontend
 cd frontend && npm install
-npm run dev           # http://localhost:5173
+npm run dev                   # http://localhost:5173
 
-# Mobile
-cd mobile && npm install
-npx expo start --clear
+# Mobile (na raiz, primeiro sincronize o IP da rede)
+npm run dev                   # gera network-config.json
+cd mobile && npx expo start --clear
 ```
 
-## 📂 Estrutura
+Para subir backend + frontend de uma vez, na raiz: `npm run dev:full`.
 
-```
-├─ backend/      # API Flask + MongoDB
-├─ frontend/     # SPA React + Vite
-├─ mobile/       # App Expo/React Native
-└─ scripts/      # Utilitários de rede
-```
+## Funcionalidades
 
-## ⚙️ Configuração
+- **Autenticação JWT** com access + refresh token e confirmação de email
+- **Catálogo** de produtos com filtros, busca textual e paginação
+- **Carrinho** de peças únicas (sem quantidade por item)
+- **Favoritos** sincronizados com o backend
+- **Pedidos** com endereço de entrega e notificação de status por email
+- **Painel admin** para gestão de produtos (role-based)
 
-### Backend (.env)
-```ini
-MONGODB_URI=mongodb://localhost:27017
-MONGODB_DATABASE=luxus_brecho_db
-JWT_SECRET_KEY=sua-chave-secreta-aqui
-FLASK_DEBUG=True
-```
+## Documentação
 
-### Mobile (.env)
-```ini
-EXPO_PUBLIC_API_URL=http://SEU_IP:5000/api
-```
+| Documento | Conteúdo |
+|-----------|----------|
+| 🏛️ [Arquitetura](./docs/arquitetura.md) | Diagramas, camadas, modelo de dados, autenticação |
+| 📡 [Referência da API](./docs/api-reference.md) | Todos os endpoints REST |
+| ⚙️ [Setup e Deploy](./docs/setup-e-deploy.md) | Ambiente local, variáveis, rede mobile, deploy |
+| 📐 [Convenções](./docs/convencoes.md) | Padrões de código, testes e Git |
 
-## 🔑 Funcionalidades
+Cada subprojeto também tem seu próprio README (`backend/`, `frontend/`, `mobile/`) com detalhes específicos.
 
-- **Autenticação JWT** com refresh token
-- **Catálogo de produtos** com filtros e busca
-- **Carrinho** (peças únicas, sem quantidade)
-- **Favoritos** sincronizados
-- **Painel Admin** para gestão de produtos
-- **Skeleton Loaders** para melhor UX
-- **Notificações por email** de status de pedido
-
-## 📱 Mobile no Dispositivo Físico
+## Testes
 
 ```bash
-# Da raiz do projeto - sincroniza IP automaticamente
-npm run dev
-
-# Depois inicie o mobile
-cd mobile && npx expo start
-```
-
-> Escaneie o QR code com Expo Go. Ambos dispositivos devem estar na mesma rede Wi-Fi.
-
-## 🧪 Testes
-
-```bash
-# Frontend
-cd frontend && npm test
-
-# Backend
 cd backend && pytest
+cd frontend && npm test
+cd mobile && npm test
 ```
 
-## 📄 Licença
+## Licença
 
-Projeto desenvolvido para fins de aprendizado. Livre para uso e modificação.
+MIT. Projeto desenvolvido também para fins de aprendizado.
