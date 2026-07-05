@@ -10,6 +10,12 @@ from unittest.mock import MagicMock, patch
 # Adiciona o diretório raiz ao path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# A partir da Fase 1, jwt_service falha no import sem JWT_SECRET_KEY. Em CI (sem
+# .env) isso quebraria a coleta dos testes já no import da app. Garante um valor
+# determinístico ANTES de importar a app; setdefault preserva um valor real já
+# presente no ambiente (ex.: quando roda localmente com .env carregado).
+os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key-nao-usar-em-producao")
+
 from app import create_app
 
 
