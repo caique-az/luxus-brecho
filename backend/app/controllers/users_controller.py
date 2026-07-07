@@ -1,5 +1,5 @@
 from __future__ import annotations
-from flask import request, jsonify, current_app
+from flask import request, jsonify, current_app, g
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 from typing import Any, Dict
@@ -21,6 +21,9 @@ from ..models.user_model import (
 from ..services.email_service import send_confirmation_email, send_welcome_email, send_password_reset_email, send_account_deletion_code
 from ..services.jwt_service import create_access_token, create_refresh_token, refresh_access_token, JWT_ACCESS_TOKEN_EXPIRES
 import random
+
+# Nº máximo de tentativas do código de exclusão antes de invalidá-lo (anti-brute-force)
+MAX_DELETION_ATTEMPTS = 5
 
 
 def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -109,7 +112,26 @@ def get_user(id: int):
 
 
 def create_user():
-    """Cria novo usuário."""
+    """Registro público de usuário.
+
+    Sempre cria um Cliente: o `tipo` do payload é ignorado para impedir o
+    auto-registro como administrador (escalada de privilégio). A criação de
+    administradores tem um caminho próprio, protegido por @admin_required
+    (ver create_admin / rota POST /api/users/admin).
+    """
+    return _create_user_with_tipo("Cliente")
+
+
+def create_admin():
+    """Cria um administrador. A rota é protegida por @admin_required: só um
+    admin autenticado consegue criar outro admin."""
+    return _create_user_with_tipo("Administrador")
+
+
+def _create_user_with_tipo(tipo: str):
+    """Núcleo de criação de usuário. O `tipo` é imposto pelo chamador (nunca vem
+    do corpo da requisição), o que garante que o privilégio seja definido pela
+    rota — não pelo cliente."""
     db = current_app.db
     if db is None:
         return jsonify(message="banco de dados indisponível"), 503
@@ -118,6 +140,9 @@ def create_user():
         payload = request.get_json()
         if not payload:
             return jsonify(message="Payload JSON é obrigatório"), 400
+
+        # O privilégio nunca é decidido pelo payload: o tipo é imposto pela rota.
+        payload["tipo"] = tipo
 
         # Valida payload
         is_valid, error_msg = validate_user_payload(payload)
@@ -684,39 +709,39 @@ def reset_password():
 
 
 def request_account_deletion():
-    """Solicita exclusão de conta - envia código de 6 dígitos por email."""
+    """Solicita exclusão de conta - envia código de 6 dígitos por email.
+
+    Requer autenticação (@jwt_required na rota): o alvo é sempre o próprio
+    usuário logado (g.user_id), nunca um id vindo do corpo da requisição.
+    """
     db = current_app.db
     if db is None:
         return jsonify(message="banco de dados indisponível"), 503
 
     try:
-        payload = request.get_json()
-        if not payload:
-            return jsonify(message="Payload JSON é obrigatório"), 400
-
-        user_id = payload.get("user_id")
-        if not user_id:
-            return jsonify(message="ID do usuário é obrigatório"), 400
+        # Identidade vem do token (int garantido por jwt_required), não do corpo.
+        user_id = g.user_id
 
         coll = get_collection(db)
 
         # Busca usuário
-        user = coll.find_one({"id": int(user_id), "ativo": True})
+        user = coll.find_one({"id": user_id, "ativo": True})
         if not user:
             return jsonify(message="Usuário não encontrado"), 404
 
         # Gera código de 6 dígitos
         deletion_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
-        
+
         # Define expiração (30 minutos)
         code_expiration = datetime.utcnow() + timedelta(minutes=30)
 
-        # Salva código no banco
+        # Salva código no banco (zera o contador de tentativas de uma solicitação anterior)
         coll.update_one(
-            {"id": int(user_id)},
+            {"id": user_id},
             {"$set": {
                 "deletion_code": deletion_code,
                 "deletion_code_expiration": code_expiration,
+                "deletion_attempts": 0,
                 "data_atualizacao": datetime.utcnow()
             }}
         )
@@ -740,7 +765,13 @@ def request_account_deletion():
 
 
 def confirm_account_deletion():
-    """Confirma exclusão de conta com código de 6 dígitos."""
+    """Confirma exclusão de conta com código de 6 dígitos.
+
+    Requer autenticação (@jwt_required na rota): o alvo é sempre o próprio
+    usuário logado (g.user_id). O código é comparado em tempo constante e é
+    invalidado após MAX_DELETION_ATTEMPTS tentativas erradas, para impedir
+    força bruta sobre os 6 dígitos.
+    """
     db = current_app.db
     if db is None:
         return jsonify(message="banco de dados indisponível"), 503
@@ -750,16 +781,17 @@ def confirm_account_deletion():
         if not payload:
             return jsonify(message="Payload JSON é obrigatório"), 400
 
-        user_id = payload.get("user_id")
+        # Identidade vem do token (int garantido por jwt_required), não do corpo.
+        user_id = g.user_id
         code = payload.get("code")
 
-        if not user_id or not code:
-            return jsonify(message="ID do usuário e código são obrigatórios"), 400
+        if not code:
+            return jsonify(message="Código é obrigatório"), 400
 
         coll = get_collection(db)
 
         # Busca usuário
-        user = coll.find_one({"id": int(user_id), "ativo": True})
+        user = coll.find_one({"id": user_id, "ativo": True})
         if not user:
             return jsonify(message="Usuário não encontrado"), 404
 
@@ -771,17 +803,29 @@ def confirm_account_deletion():
         if user.get("deletion_code_expiration") and user["deletion_code_expiration"] < datetime.utcnow():
             # Limpa código expirado
             coll.update_one(
-                {"id": int(user_id)},
-                {"$unset": {"deletion_code": "", "deletion_code_expiration": ""}}
+                {"id": user_id},
+                {"$unset": {"deletion_code": "", "deletion_code_expiration": "", "deletion_attempts": ""}}
             )
             return jsonify(message="Código expirado. Solicite um novo código."), 410
 
-        # Verifica se o código está correto
-        if user["deletion_code"] != code:
+        # Verifica o código em tempo constante (evita side-channel por timing)
+        if not secrets.compare_digest(str(user["deletion_code"]), str(code)):
+            attempts = int(user.get("deletion_attempts", 0)) + 1
+            if attempts >= MAX_DELETION_ATTEMPTS:
+                # Excedeu o limite: invalida o código, forçando nova solicitação
+                coll.update_one(
+                    {"id": user_id},
+                    {"$unset": {"deletion_code": "", "deletion_code_expiration": "", "deletion_attempts": ""}}
+                )
+                return jsonify(message="Muitas tentativas inválidas. Solicite um novo código."), 429
+            coll.update_one(
+                {"id": user_id},
+                {"$set": {"deletion_attempts": attempts}}
+            )
             return jsonify(message="Código inválido"), 400
 
         # Exclui a conta permanentemente
-        result = coll.delete_one({"id": int(user_id)})
+        result = coll.delete_one({"id": user_id})
 
         if result.deleted_count == 0:
             return jsonify(message="Erro ao excluir conta"), 500

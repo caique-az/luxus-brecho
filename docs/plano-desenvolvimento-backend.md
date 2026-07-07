@@ -96,7 +96,7 @@ Cada fase é um bloco entregável e testável isoladamente. Faça **uma fase por
   1. No registro público, **forçar `tipo="Cliente"`** — ignorar/rejeitar `tipo` vindo do payload.
   2. Criar um caminho separado de criação de admin somente sob `@admin_required` (novo endpoint ou flag interna).
 - **Critério de aceite:** `POST /api/users/` com `tipo:"Administrador"` cria um Cliente comum (não admin).
-- [ ] Concluído
+- [x] Concluído — `create_user` força `Cliente` via `_create_user_with_tipo`; novo `POST /api/users/admin` sob `@admin_required` cria admins.
 
 ### 3.2 — Endurecer a exclusão de conta `[#8]`
 - **Arquivos:** `backend/app/controllers/users_controller.py:686` (`request_account_deletion`), `:742` (`confirm_account_deletion`), `backend/app/routes/users_routes.py:142-143`.
@@ -108,14 +108,14 @@ Cada fase é um bloco entregável e testável isoladamente. Faça **uma fase por
   4. Comparação em tempo constante (`secrets.compare_digest`).
   5. Validar `user_id` numérico e retornar 400 (não deixar estourar 500).
 - **Critério de aceite:** anônimo não dispara/consome exclusão; código é invalidado após N erros; entrada não numérica → 400.
-- [ ] Concluído
+- [x] Concluído — rotas sob `@jwt_required` + rate limit; alvo vem de `g.user_id` (não do corpo); `secrets.compare_digest`; contador `deletion_attempts` invalida o código após `MAX_DELETION_ATTEMPTS=5`. Como o id vem do token (int), o 500 por entrada não numérica deixa de existir.
 
 ### 3.3 — Frescor de privilégio nos decorators sensíveis `[#15]`
 - **Arquivo:** `backend/app/services/jwt_service.py:157-187` (`admin_required`) e `:97-124` (`jwt_required`).
 - **Problema:** `admin_required` confia na claim `type` do token; `jwt_required` nunca checa `ativo`. Admin rebaixado ou conta desativada mantêm acesso por até 24h.
 - **Passos:** reler `tipo`/`ativo` do banco (1 query) nos decorators sensíveis e negar se `ativo=False` ou papel divergente. Avaliar o trade-off latência × frescor (alternativa: tokens de vida curta).
 - **Critério de aceite:** desativar um usuário no banco invalida o acesso na próxima requisição; rebaixar um admin remove o privilégio imediatamente.
-- [ ] Concluído
+- [x] Concluído — helper `_load_fresh_user` relê `tipo`/`ativo` do banco em `jwt_required`, `admin_required` e `owner_or_admin_required`. O token é o 1º gate (nunca eleva privilégio); o banco só revoga. Sem banco acessível (testes isolados/Mongo fora), degrada para as claims do token. Conta desativada → 403; admin rebaixado → 403; token de usuário inexistente → 401.
 
 ---
 

@@ -118,6 +118,9 @@ class MockCollection:
         if doc:
             if "$set" in update:
                 doc.update(update["$set"])
+            if "$unset" in update:
+                for key in update["$unset"]:
+                    doc.pop(key, None)
             if "$inc" in update:
                 for key, value in update["$inc"].items():
                     doc[key] = doc.get(key, 0) + value
@@ -302,15 +305,30 @@ def mock_db(app):
 
 
 @pytest.fixture
-def auth_headers():
+def auth_headers(mock_db):
     """Factory de headers Authorization com um JWT válido.
 
     As rotas protegidas (@admin_required / @owner_or_admin_required) exigem um
     Bearer token; os testes de integração usam esta factory para autenticar.
+
+    A partir da Fase 3 os decorators sensíveis releem `tipo`/`ativo` do banco
+    (frescor de privilégio), então a factory também semeia — de forma idempotente
+    — um usuário ATIVO correspondente na coleção `users`. Sem isso, o portador do
+    token seria tratado como conta inexistente e as rotas responderiam 401.
     """
     from app.services.jwt_service import create_access_token
 
     def _make(user_id=1, tipo="Cliente", email="user@test.com"):
+        users = mock_db["users"]
+        if users.find_one({"id": user_id}) is None:
+            users.insert_one({
+                "id": user_id,
+                "nome": f"User {user_id}",
+                "email": email,
+                "tipo": tipo,
+                "ativo": True,
+                "email_confirmado": True,
+            })
         token = create_access_token(user_id, tipo, email)
         return {"Authorization": f"Bearer {token}"}
 
