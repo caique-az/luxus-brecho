@@ -58,15 +58,15 @@ Estado de cada tema em relação ao **contrato do backend** (fonte de verdade). 
 
 | ID | Débito | Fonte | Impacto observável | Registrado em |
 |----|--------|-------|--------------------|---------------|
-| <a id="doc-01"></a>DOC-01 | **README da raiz** diz que `npm run dev:full` sobe backend + frontend; `start-dev.js` sobe backend + **mobile**. As afirmações de "JWT" e "peça única sem quantity" valem só para o web. | `README.md`, `start-dev.js` | Comando documentado não faz o que promete | 2026-07-07 |
-| <a id="doc-02"></a>DOC-02 | **`backend/README.md`** documenta 5 de ~50 rotas, omite `ADMIN_EMAIL`/`ADMIN_PASSWORD` (sem elas não há seed de admin), omite `@owner_or_admin_required`/`@jwt_optional` e sugere `JWT_ALGORITHM` configurável (é ignorada — [BE-05](#be-05)). | `backend/README.md` | Setup guiado só pelo README resulta em banco sem admin | 2026-07-07 |
-| <a id="doc-03"></a>DOC-03 | **`mobile/README.md`** afirma Expo 54 (o `package.json` tem Expo ^49), autenticação JWT (não há — [MB-01](#mb-01)) e testes Jest (não há — [MB-07](#mb-07)). | `mobile/README.md`, `mobile/package.json` | Expectativas falsas sobre o estado do app | 2026-07-07 |
+| — | *(nenhum aberto)* | | | |
 
 ## Resolvidos
 
 | ID | Débito | Resolvido em | Commit |
 |----|--------|--------------|--------|
-| — | *(nenhum ainda)* | | |
+| <a id="doc-01"></a>DOC-01 | README da raiz dizia que `npm run dev:full` sobe backend + frontend (é backend + **mobile**) e generalizava "JWT"/"peça única" para os dois clientes | 2026-07-07 | `1ce9f56` |
+| <a id="doc-02"></a>DOC-02 | `backend/README.md` documentava 5 de ~50 rotas, omitia `ADMIN_*` (seed de admin) e sugeria `JWT_ALGORITHM` configurável | 2026-07-07 | `1ce9f56` |
+| <a id="doc-03"></a>DOC-03 | `mobile/README.md` afirmava Expo 54, autenticação JWT e testes Jest — nada disso existia no app | 2026-07-07 | `1ce9f56` |
 
 ---
 
