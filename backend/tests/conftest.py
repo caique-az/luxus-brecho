@@ -154,6 +154,23 @@ class MockCollection:
         
         return result
     
+    def update_many(self, query, update, upsert=False, **kwargs):
+        # Usa find() (suporta $in) para pegar todos os documentos que casam.
+        result = MagicMock()
+        docs = list(self.find(query))
+        for doc in docs:
+            if "$set" in update:
+                doc.update(update["$set"])
+            if "$unset" in update:
+                for key in update["$unset"]:
+                    doc.pop(key, None)
+            if "$inc" in update:
+                for key, value in update["$inc"].items():
+                    doc[key] = doc.get(key, 0) + value
+        result.matched_count = len(docs)
+        result.modified_count = len(docs)
+        return result
+
     def find_one_and_update(self, query, update, upsert=False, return_document=None):
         doc = self.find_one(query)
         

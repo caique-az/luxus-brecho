@@ -333,7 +333,13 @@ def ensure_users_collection(db):
         
         # Índice para busca por nome
         collection.create_index([("nome", TEXT)])
-        
+
+        # Índices esparsos para lookups por token (confirmação de email e reset
+        # de senha). Sem eles, confirm_email/reset_password varrem a coleção
+        # inteira. Esparsos: reset_token só existe em quem pediu reset.
+        collection.create_index([("token_confirmacao", ASCENDING)], sparse=True)
+        collection.create_index([("reset_token", ASCENDING)], sparse=True)
+
         print(f"✅ Índices criados para a coleção '{COLLECTION_NAME}'")
         
         # Cria usuário administrador padrão se não existir

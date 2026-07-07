@@ -171,13 +171,12 @@ def create_order(user_id: int):
                         # Insere pedido
                         coll.insert_one(order, session=session)
                         
-                        # Atualiza status dos produtos para vendido
-                        for product_id in product_ids_to_update:
-                            products_coll.update_one(
-                                {"id": product_id},
-                                {"$set": {"status": "vendido"}},
-                                session=session
-                            )
+                        # Atualiza status dos produtos para vendido (uma query)
+                        products_coll.update_many(
+                            {"id": {"$in": product_ids_to_update}},
+                            {"$set": {"status": "vendido"}},
+                            session=session
+                        )
                         
                         # Limpa o carrinho do usuário
                         cart_coll.update_one(
@@ -208,13 +207,13 @@ def create_order(user_id: int):
 def _create_order_without_transaction(coll, products_coll, cart_coll, order, product_ids, user_id, now):
     """Cria pedido sem transação (fallback)."""
     coll.insert_one(order)
-    
-    for product_id in product_ids:
-        products_coll.update_one(
-            {"id": product_id},
-            {"$set": {"status": "vendido"}}
-        )
-    
+
+    # Marca todos os produtos como vendidos numa única query (evita N updates)
+    products_coll.update_many(
+        {"id": {"$in": product_ids}},
+        {"$set": {"status": "vendido"}}
+    )
+
     cart_coll.update_one(
         {"user_id": user_id},
         {"$set": {"items": [], "updated_at": now}}

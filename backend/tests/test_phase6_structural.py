@@ -119,3 +119,28 @@ class TestRequireDb:
         resp = client.get("/api/users/", headers=admin_headers)
         assert resp.status_code == 503
         assert resp.get_json()["message"] == "Banco de dados indisponível"
+
+
+# --------------------------------------------------------------------------- #
+# #5 — create_order marca os produtos como vendido (via update_many, 1 query)
+# --------------------------------------------------------------------------- #
+class TestOrderMarksProductsSold:
+    def test_create_order_marca_produto_vendido(self, client, mock_db, sample_product, user_headers):
+        import json
+
+        mock_db["products"].insert_one(sample_product)
+        body = {
+            "items": [{"product_id": sample_product["id"]}],
+            "endereco": {
+                "rua": "Rua Teste", "numero": "1", "bairro": "Centro",
+                "cidade": "São Paulo", "estado": "SP", "cep": "01234-567",
+            },
+        }
+        resp = client.post(
+            "/api/orders/user/1", data=json.dumps(body),
+            content_type="application/json", headers=user_headers,
+        )
+        assert resp.status_code == 201
+
+        produto = mock_db["products"].find_one({"id": sample_product["id"]})
+        assert produto["status"] == "vendido"
