@@ -22,17 +22,10 @@ from ..models.product_model import (
     normalize_product,
 )
 from ..services.supabase_storage import storage_service
+from ..utils.serialization import serialize_doc as _serialize
 
 # Create the Blueprint
 products_bp = Blueprint('products', __name__)
-
-def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
-    """Helper function to serialize MongoDB documents"""
-    if not doc:
-        return {}
-    d = dict(doc)
-    d.pop("_id", None)
-    return d
 
 @products_bp.route('/', methods=['GET'])
 def list_products():

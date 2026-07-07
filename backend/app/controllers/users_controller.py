@@ -3,10 +3,12 @@ from flask import request, jsonify, current_app, g
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 from typing import Any, Dict
+import re
 import time
 import secrets
 from datetime import datetime, timedelta
 
+from ..utils.pagination import parse_pagination
 from ..models.user_model import (
     get_collection,
     prepare_new_user,
@@ -45,10 +47,9 @@ def list_users():
     coll = get_collection(db)
 
     try:
-        # Parâmetros de paginação
-        page = int(request.args.get("page", 1))
-        page_size = int(request.args.get("page_size", 20))
-        
+        # Paginação com clamp (page_size limitado; evita .limit() ilimitado)
+        page, page_size, skip = parse_pagination(default_page_size=20)
+
         # Parâmetros de filtro
         tipo = request.args.get("tipo")
         ativo = request.args.get("ativo")
@@ -56,24 +57,26 @@ def list_users():
 
         # Constrói filtro
         filter_query = {}
-        
+
         if tipo and tipo in USER_TYPES:
             filter_query["tipo"] = tipo
-        
+
         if ativo is not None:
             filter_query["ativo"] = ativo.lower() == "true"
-        
+
         if search:
+            # Escapa o termo: sem isso, um input como "(a+)+$" vira regex e
+            # abre ReDoS (mesmo restrito a admin autenticado).
+            safe_search = re.escape(search)
             filter_query["$or"] = [
-                {"nome": {"$regex": search, "$options": "i"}},
-                {"email": {"$regex": search, "$options": "i"}}
+                {"nome": {"$regex": safe_search, "$options": "i"}},
+                {"email": {"$regex": safe_search, "$options": "i"}}
             ]
 
         # Contagem total
         total = coll.count_documents(filter_query)
 
         # Busca com paginação
-        skip = (page - 1) * page_size
         cursor = coll.find(filter_query).sort("data_criacao", -1).skip(skip).limit(page_size)
         
         users = [_serialize(doc) for doc in cursor]

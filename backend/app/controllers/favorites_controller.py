@@ -18,16 +18,7 @@ from ..models.favorite_model import (
     ensure_indexes
 )
 from ..models.product_model import get_collection as get_products_collection
-
-
-def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
-    """Serializa documento MongoDB removendo _id."""
-    if not doc:
-        return {}
-    d = dict(doc)
-    if '_id' in d:
-        d['_id'] = str(d['_id'])
-    return d
+from ..utils.serialization import serialize_doc as _serialize
 
 
 def list_user_favorites(user_id: int):

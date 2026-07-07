@@ -9,6 +9,7 @@ from ..models.category_model import (
     validate_category,
     normalize_category,
 )
+from ..utils.serialization import serialize_doc as _serialize
 
 
 def _invalidate_categories_cache():
@@ -18,15 +19,6 @@ def _invalidate_categories_cache():
         invalidate_categories_cache()
     except ImportError:
         pass  # Cache não disponível
-
-
-def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
-    """Remove campos internos do MongoDB do documento."""
-    if not doc:
-        return {}
-    d = dict(doc)
-    d.pop("_id", None)
-    return d
 
 
 def list_categories():
