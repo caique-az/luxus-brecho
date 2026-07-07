@@ -216,6 +216,7 @@ def create_app():
     @app.route('/', methods=['GET'])
     def index():
         return jsonify({
+            'success': True,
             'message': 'Luxus Brechó API está funcionando!',
             'version': '1.0.0',
             'status': 'online',
@@ -289,7 +290,7 @@ def create_app():
         return jsonify({
             'success': False,
             'message': 'Erro interno do servidor',
-            'error': str(error) if app.config['DEBUG'] else 'Erro interno'
+            'detail': str(error) if app.config['DEBUG'] else 'Erro interno'
         }), 500
     
     @app.errorhandler(405)
@@ -320,7 +321,7 @@ def create_app():
         return jsonify({
             'success': False,
             'message': 'Erro interno do servidor',
-            'error': str(error) if app.config['DEBUG'] else 'Erro interno'
+            'detail': str(error) if app.config['DEBUG'] else 'Erro interno'
         }), 500
 
     print("🚀 Aplicação Flask criada com sucesso!")

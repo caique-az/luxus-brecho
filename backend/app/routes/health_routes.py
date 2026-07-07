@@ -39,7 +39,7 @@ def health_check():
             'success': False,
             'status': 'ERROR',
             'message': 'Erro no health check',
-            'error': str(e),
+            'detail': str(e),
             'timestamp': datetime.datetime.now().isoformat()
         }), 500
 
@@ -47,4 +47,4 @@ def health_check():
 @cross_origin()
 def health_options():
     """Lida com requisições OPTIONS para CORS preflight no health"""
-    return jsonify({'message': 'OK'}), 200
+    return jsonify({'success': True, 'message': 'OK'}), 200

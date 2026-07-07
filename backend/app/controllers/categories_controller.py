@@ -11,6 +11,7 @@ from ..models.category_model import (
 from ..utils.serialization import serialize_doc
 from ..utils.pagination import get_pagination_params
 from ..utils.decorators import require_db
+from ..utils.responses import ok, err
 
 
 def _invalidate_categories_cache():
@@ -43,14 +44,14 @@ def list_categories():
         serialize_doc(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
     ]
 
-    return jsonify(
-        items=items,
-        pagination={
+    return ok({
+        "items": items,
+        "pagination": {
             "page": page,
             "page_size": page_size,
             "total": total,
         },
-    )
+    })
 
 
 @require_db
@@ -61,8 +62,8 @@ def get_category(id: int):
 
     doc = coll.find_one({"id": int(id)})
     if not doc:
-        return jsonify(message="category not found"), 404
-    return jsonify(serialize_doc(doc))
+        return err("category not found", 404)
+    return ok(serialize_doc(doc))
 
 
 @require_db
@@ -72,22 +73,22 @@ def create_category():
     coll = get_collection(db)
 
     payload = request.get_json(silent=True) or {}
-    ok, errors, doc = prepare_new_category(db, payload)
-    if not ok:
-        return jsonify(message="validation error", errors=errors), 400
+    valid, errors, doc = prepare_new_category(db, payload)
+    if not valid:
+        return err("validation error", 400, errors=errors)
 
     try:
         # Verificar se nome já existe
         existing = coll.find_one({"name": doc["name"]})
         if existing:
-            return jsonify(message="category name already exists"), 409
+            return err("category name already exists", 409)
 
         coll.insert_one(doc)
         _invalidate_categories_cache()  # Invalida cache após criar
     except DuplicateKeyError:
-        return jsonify(message="category id already exists"), 409
+        return err("category id already exists", 409)
 
-    return jsonify(serialize_doc(doc)), 201
+    return ok(serialize_doc(doc), status=201)
 
 
 @require_db
@@ -98,7 +99,7 @@ def update_category(id: int):
 
     current = coll.find_one({"id": int(id)})
     if not current:
-        return jsonify(message="category not found"), 404
+        return err("category not found", 404)
 
     payload = request.get_json(silent=True) or {}
     # Merge parcial
@@ -106,9 +107,9 @@ def update_category(id: int):
     merged.update(payload)
     merged = normalize_category(merged)
 
-    ok, errors = validate_category(merged)
-    if not ok:
-        return jsonify(message="validation error", errors=errors), 400
+    valid, errors = validate_category(merged)
+    if not valid:
+        return err("validation error", 400, errors=errors)
 
     # Não permitir troca de id
     merged["id"] = current["id"]
@@ -117,12 +118,12 @@ def update_category(id: int):
     if "name" in payload and payload["name"] != current["name"]:
         existing = coll.find_one({"name": merged["name"], "id": {"$ne": int(id)}})
         if existing:
-            return jsonify(message="category name already exists"), 409
+            return err("category name already exists", 409)
 
     coll.update_one({"id": int(id)}, {"$set": merged})
     _invalidate_categories_cache()  # Invalida cache após atualizar
     updated = coll.find_one({"id": int(id)})
-    return jsonify(serialize_doc(updated))
+    return ok(serialize_doc(updated))
 
 
 @require_db
@@ -133,7 +134,7 @@ def delete_category(id: int):
 
     category = coll.find_one({"id": int(id)})
     if not category:
-        return jsonify(message="categoria não encontrada"), 404
+        return err("categoria não encontrada", 404)
 
     # Verifica se há produtos usando a categoria
     category_name = category.get("name", category.get("nome", "")).strip()
@@ -147,17 +148,18 @@ def delete_category(id: int):
             {"categoria": category_name.title()}
         )
     if products_using_category > 0:
-        return jsonify(
-            message="não é possível deletar categoria com produtos associados",
-            products_count=products_using_category
-        ), 400
+        return err(
+            "não é possível deletar categoria com produtos associados",
+            400,
+            products_count=products_using_category,
+        )
 
     # Delete permanente
     result = coll.delete_one({"id": int(id)})
     if result.deleted_count > 0:
         _invalidate_categories_cache()  # Invalida cache após deletar
-        return jsonify(message="categoria deletada com sucesso"), 200
-    return jsonify(message="erro ao deletar categoria"), 500
+        return ok(message="categoria deletada com sucesso")
+    return err("erro ao deletar categoria", 500)
 
 
 @require_db
@@ -168,17 +170,21 @@ def activate_category(id: int):
 
     category = coll.find_one({"id": int(id)})
     if not category:
-        return jsonify(message="category not found"), 404
+        return err("category not found", 404)
 
     coll.update_one({"id": int(id)}, {"$set": {"active": True}})
     _invalidate_categories_cache()  # Invalida cache após ativar
     updated = coll.find_one({"id": int(id)})
-    return jsonify(serialize_doc(updated))
+    return ok(serialize_doc(updated))
 
 
 @require_db
 def get_categories_summary():
-    """Retorna resumo das categorias para uso em outros endpoints."""
+    """Retorna resumo das categorias para uso em outros endpoints.
+
+    Exceção ao envelope: devolve uma **lista pura** de categorias ativas, formato
+    consumido diretamente pelos clientes (mobile tipa como ``Category[]``).
+    """
     db = current_app.db
     coll = get_collection(db)
 

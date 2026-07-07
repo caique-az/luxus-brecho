@@ -97,7 +97,8 @@ api.interceptors.response.use(
     }
 
     if (error.response?.status === 403) {
-      console.warn('Acesso negado:', error.response?.data?.error);
+      // Envelope padrão: a mensagem vem sempre em `message` (não mais `error`).
+      console.warn('Acesso negado:', error.response?.data?.message);
     }
 
     return Promise.reject(error);

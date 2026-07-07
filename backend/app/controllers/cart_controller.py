@@ -1,11 +1,12 @@
 """
 Controller para gerenciamento de carrinhos de compras.
 """
-from flask import jsonify, request, current_app
+from flask import request, current_app
 from datetime import datetime
 
 from ..models.cart_model import get_collection
 from ..utils.decorators import require_db
+from ..utils.responses import ok, err
 
 
 @require_db
@@ -18,7 +19,7 @@ def get_user_cart(user_id: int):
 
     if not cart:
         # Retorna carrinho vazio se não existir
-        return jsonify({
+        return ok({
             "user_id": user_id,
             "items": [],
             "created_at": None,
@@ -54,7 +55,7 @@ def get_user_cart(user_id: int):
                 }
             })
 
-    return jsonify({
+    return ok({
         "id": str(cart.get("_id", "")),
         "user_id": user_id,
         "items": items_with_details,
@@ -70,23 +71,23 @@ def add_to_cart(user_id: int):
 
     payload = request.get_json()
     if not payload:
-        return jsonify(message="Payload JSON é obrigatório"), 400
+        return err("Payload JSON é obrigatório")
 
     product_id = payload.get("product_id")
     quantity = payload.get("quantity", 1)
 
     if not product_id:
-        return jsonify(message="ID do produto é obrigatório"), 400
+        return err("ID do produto é obrigatório")
 
     # Verifica se o produto existe e está disponível
     products_coll = db["products"]
     product = products_coll.find_one({"id": product_id})
 
     if not product:
-        return jsonify(message="Produto não encontrado"), 404
+        return err("Produto não encontrado", 404)
 
     if product.get("status") != "disponivel":
-        return jsonify(message="Produto não está disponível"), 400
+        return err("Produto não está disponível")
 
     coll = get_collection(db)
     now = datetime.utcnow()
@@ -141,11 +142,12 @@ def add_to_cart(user_id: int):
             "updated_at": now,
         })
 
-    return jsonify({
-        "message": "Produto adicionado ao carrinho",
-        "product_id": product_id,
-        "quantity": quantity,
-    }), 201
+    return ok(
+        message="Produto adicionado ao carrinho",
+        status=201,
+        product_id=product_id,
+        quantity=quantity,
+    )
 
 
 @require_db
@@ -155,12 +157,12 @@ def remove_from_cart(user_id: int):
 
     payload = request.get_json()
     if not payload:
-        return jsonify(message="Payload JSON é obrigatório"), 400
+        return err("Payload JSON é obrigatório")
 
     product_id = payload.get("product_id")
 
     if not product_id:
-        return jsonify(message="ID do produto é obrigatório"), 400
+        return err("ID do produto é obrigatório")
 
     coll = get_collection(db)
     now = datetime.utcnow()
@@ -174,12 +176,9 @@ def remove_from_cart(user_id: int):
     )
 
     if result.modified_count == 0:
-        return jsonify(message="Produto não encontrado no carrinho"), 404
+        return err("Produto não encontrado no carrinho", 404)
 
-    return jsonify({
-        "message": "Produto removido do carrinho",
-        "product_id": product_id,
-    })
+    return ok(message="Produto removido do carrinho", product_id=product_id)
 
 
 @require_db
@@ -189,16 +188,16 @@ def update_cart_item(user_id: int):
 
     payload = request.get_json()
     if not payload:
-        return jsonify(message="Payload JSON é obrigatório"), 400
+        return err("Payload JSON é obrigatório")
 
     product_id = payload.get("product_id")
     quantity = payload.get("quantity")
 
     if not product_id:
-        return jsonify(message="ID do produto é obrigatório"), 400
+        return err("ID do produto é obrigatório")
 
     if not isinstance(quantity, int) or quantity < 1:
-        return jsonify(message="Quantidade deve ser um número inteiro positivo"), 400
+        return err("Quantidade deve ser um número inteiro positivo")
 
     coll = get_collection(db)
     now = datetime.utcnow()
@@ -214,13 +213,9 @@ def update_cart_item(user_id: int):
     )
 
     if result.modified_count == 0:
-        return jsonify(message="Produto não encontrado no carrinho"), 404
+        return err("Produto não encontrado no carrinho", 404)
 
-    return jsonify({
-        "message": "Quantidade atualizada",
-        "product_id": product_id,
-        "quantity": quantity,
-    })
+    return ok(message="Quantidade atualizada", product_id=product_id, quantity=quantity)
 
 
 @require_db
@@ -241,7 +236,7 @@ def clear_cart(user_id: int):
         }
     )
 
-    return jsonify({"message": "Carrinho limpo com sucesso"})
+    return ok(message="Carrinho limpo com sucesso")
 
 
 @require_db
@@ -251,7 +246,7 @@ def sync_cart(user_id: int):
 
     payload = request.get_json()
     if not payload:
-        return jsonify(message="Payload JSON é obrigatório"), 400
+        return err("Payload JSON é obrigatório")
 
     items = payload.get("items", [])
 
@@ -293,7 +288,4 @@ def sync_cart(user_id: int):
         upsert=True
     )
 
-    return jsonify({
-        "message": "Carrinho sincronizado",
-        "items_count": len(valid_items),
-    })
+    return ok(message="Carrinho sincronizado", items_count=len(valid_items))

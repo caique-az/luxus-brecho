@@ -9,7 +9,7 @@ Endpoints:
 - GET /favorites/check/<product_id> - Verifica se produto está favoritado
 - POST /favorites/toggle - Alterna favorito
 """
-from flask import request, jsonify, current_app
+from flask import request, current_app
 from typing import Any, Dict
 
 from ..models.favorite_model import (
@@ -23,6 +23,7 @@ from ..models.favorite_model import (
 from ..models.product_model import get_collection as get_products_collection
 from ..utils.decorators import require_db
 from ..utils.serialization import serialize_doc
+from ..utils.responses import ok, err
 
 
 def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -44,7 +45,7 @@ def list_user_favorites(user_id: int):
     success, error, favorites = get_user_favorites(db, user_id)
 
     if not success:
-        return jsonify(message=error), 500
+        return err(error, 500)
 
     # Buscar detalhes dos produtos
     products_coll = get_products_collection(db)
@@ -67,10 +68,7 @@ def list_user_favorites(user_id: int):
 
         result.append(fav_data)
 
-    return jsonify(
-        favorites=result,
-        total=len(result)
-    ), 200
+    return ok({"favorites": result, "total": len(result)})
 
 
 @require_db
@@ -85,11 +83,11 @@ def add_to_favorites(user_id: int):
     # Validar payload
     payload = request.get_json()
     if not payload:
-        return jsonify(message="Payload inválido"), 400
+        return err("Payload inválido")
 
     valid, error = validate_favorite_payload(payload)
     if not valid:
-        return jsonify(message=error), 400
+        return err(error)
 
     product_id = payload['product_id']
 
@@ -98,20 +96,21 @@ def add_to_favorites(user_id: int):
     product = products_coll.find_one({"id": product_id})
 
     if not product:
-        return jsonify(message="Produto não encontrado"), 404
+        return err("Produto não encontrado", 404)
 
     # Adicionar favorito
     success, error, favorite = add_favorite(db, user_id, product_id)
 
     if not success:
         if "já está nos favoritos" in error:
-            return jsonify(message=error), 409  # Conflict
-        return jsonify(message=error), 500
+            return err(error, 409)  # Conflict
+        return err(error, 500)
 
-    return jsonify(
+    return ok(
         message="Produto adicionado aos favoritos",
-        favorite=_serialize(favorite)
-    ), 201
+        status=201,
+        favorite=_serialize(favorite),
+    )
 
 
 @require_db
@@ -127,10 +126,10 @@ def remove_from_favorites(user_id: int, product_id: int):
 
     if not success:
         if "não encontrado" in error:
-            return jsonify(message=error), 404
-        return jsonify(message=error), 500
+            return err(error, 404)
+        return err(error, 500)
 
-    return jsonify(message="Produto removido dos favoritos"), 200
+    return ok(message="Produto removido dos favoritos")
 
 
 @require_db
@@ -144,7 +143,7 @@ def check_favorite(user_id: int, product_id: int):
     # Verificar se está favoritado
     favorited = is_favorited(db, user_id, product_id)
 
-    return jsonify(is_favorited=favorited), 200
+    return ok(is_favorited=favorited)
 
 
 @require_db
@@ -159,11 +158,11 @@ def toggle_favorite(user_id: int):
     # Validar payload
     payload = request.get_json()
     if not payload:
-        return jsonify(message="Payload inválido"), 400
+        return err("Payload inválido")
 
     valid, error = validate_favorite_payload(payload)
     if not valid:
-        return jsonify(message=error), 400
+        return err(error)
 
     product_id = payload['product_id']
 
@@ -172,7 +171,7 @@ def toggle_favorite(user_id: int):
     product = products_coll.find_one({"id": product_id})
 
     if not product:
-        return jsonify(message="Produto não encontrado"), 404
+        return err("Produto não encontrado", 404)
 
     # Verificar se já está favoritado
     favorited = is_favorited(db, user_id, product_id)
@@ -181,20 +180,18 @@ def toggle_favorite(user_id: int):
         # Remover
         success, error = remove_favorite(db, user_id, product_id)
         if not success:
-            return jsonify(message=error), 500
+            return err(error, 500)
 
-        return jsonify(
-            message="Produto removido dos favoritos",
-            is_favorited=False
-        ), 200
+        return ok(message="Produto removido dos favoritos", is_favorited=False)
     else:
         # Adicionar
         success, error, favorite = add_favorite(db, user_id, product_id)
         if not success:
-            return jsonify(message=error), 500
+            return err(error, 500)
 
-        return jsonify(
+        return ok(
             message="Produto adicionado aos favoritos",
+            status=201,
             is_favorited=True,
-            favorite=_serialize(favorite)
-        ), 201
+            favorite=_serialize(favorite),
+        )

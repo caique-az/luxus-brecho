@@ -1,7 +1,7 @@
 """
 Controller para gerenciamento de pedidos.
 """
-from flask import jsonify, request, current_app, g
+from flask import request, current_app, g
 from datetime import datetime
 from typing import Dict, Any
 
@@ -15,6 +15,7 @@ from ..models.order_model import (
 from ..models.cart_model import get_collection as get_cart_collection
 from ..utils.pagination import get_pagination_params
 from ..utils.decorators import require_db
+from ..utils.responses import ok, err
 
 
 def _order_access_denied(order: Dict[str, Any]) -> bool:
@@ -42,13 +43,13 @@ def get_user_orders(user_id: int):
     skip = (page - 1) * page_size
     orders = list(coll.find(query).sort("created_at", -1).skip(skip).limit(page_size))
 
-    return jsonify({
+    return ok({
         "orders": [normalize_order(order) for order in orders],
         "pagination": {
             "page": page,
             "page_size": page_size,
             "total": total,
-        }
+        },
     })
 
 
@@ -61,12 +62,12 @@ def get_order_by_id(order_id: int):
     order = coll.find_one({"id": order_id})
 
     if not order:
-        return jsonify(message="Pedido não encontrado"), 404
+        return err("Pedido não encontrado", 404)
 
     if _order_access_denied(order):
-        return jsonify(message="Acesso negado"), 403
+        return err("Acesso negado", 403)
 
-    return jsonify(normalize_order(order))
+    return ok(normalize_order(order))
 
 
 @require_db
@@ -76,14 +77,14 @@ def create_order(user_id: int):
 
     payload = request.get_json()
     if not payload:
-        return jsonify(message="Payload JSON é obrigatório"), 400
+        return err("Payload JSON é obrigatório")
 
     payload["user_id"] = user_id
 
     # Valida dados do pedido
     is_valid, error_msg = validate_order(payload)
     if not is_valid:
-        return jsonify(message=error_msg), 400
+        return err(error_msg)
 
     # Busca informações dos produtos numa única query
     products_coll = db["products"]
@@ -104,7 +105,7 @@ def create_order(user_id: int):
         product = products_by_id.get(item.get("product_id"))
         if product:
             if product.get("status") != "disponivel":
-                return jsonify(message=f"Produto '{product.get('titulo')}' não está disponível"), 400
+                return err(f"Produto '{product.get('titulo')}' não está disponível")
 
             item_total = (product.get("preco", 0)) * item.get("quantity", 1)
             items_with_details.append({
@@ -168,10 +169,11 @@ def create_order(user_id: int):
         # Sem suporte a transações
         _create_order_without_transaction(coll, products_coll, cart_coll, order, product_ids_to_update, user_id, now)
 
-    return jsonify({
-        "message": "Pedido criado com sucesso",
-        "order": normalize_order(order),
-    }), 201
+    return ok(
+        message="Pedido criado com sucesso",
+        status=201,
+        order=normalize_order(order),
+    )
 
 
 def _create_order_without_transaction(coll, products_coll, cart_coll, order, product_ids, user_id, now):
@@ -197,11 +199,11 @@ def update_order_status(order_id: int):
 
     payload = request.get_json()
     if not payload:
-        return jsonify(message="Payload JSON é obrigatório"), 400
+        return err("Payload JSON é obrigatório")
 
     new_status = payload.get("status")
     if not new_status or new_status not in ORDER_STATUS:
-        return jsonify(message=f"Status inválido. Valores permitidos: {', '.join(ORDER_STATUS)}"), 400
+        return err(f"Status inválido. Valores permitidos: {', '.join(ORDER_STATUS)}")
 
     coll = get_collection(db)
     now = datetime.utcnow()
@@ -212,13 +214,14 @@ def update_order_status(order_id: int):
     )
 
     if result.matched_count == 0:
-        return jsonify(message="Pedido não encontrado"), 404
+        return err("Pedido não encontrado", 404)
 
-    return jsonify({
-        "message": "Status atualizado com sucesso",
-        "order_id": order_id,
-        "status": new_status,
-    })
+    # ``status`` (do pedido) vai no dict de dados para não colidir com o código
+    # HTTP no helper ``ok``.
+    return ok(
+        {"order_id": order_id, "status": new_status},
+        message="Status atualizado com sucesso",
+    )
 
 
 @require_db
@@ -233,16 +236,16 @@ def cancel_order(order_id: int):
     # Busca o pedido
     order = coll.find_one({"id": order_id})
     if not order:
-        return jsonify(message="Pedido não encontrado"), 404
+        return err("Pedido não encontrado", 404)
 
     if _order_access_denied(order):
-        return jsonify(message="Acesso negado"), 403
+        return err("Acesso negado", 403)
 
     if order.get("status") == "cancelado":
-        return jsonify(message="Pedido já está cancelado"), 400
+        return err("Pedido já está cancelado")
 
     if order.get("status") in ["enviado", "entregue"]:
-        return jsonify(message="Não é possível cancelar pedido já enviado ou entregue"), 400
+        return err("Não é possível cancelar pedido já enviado ou entregue")
 
     # Restaura status dos produtos para disponível
     product_ids = [item.get("product_id") for item in order.get("items", [])]
@@ -258,7 +261,4 @@ def cancel_order(order_id: int):
         {"$set": {"status": "cancelado", "updated_at": now}}
     )
 
-    return jsonify({
-        "message": "Pedido cancelado com sucesso",
-        "order_id": order_id,
-    })
+    return ok(message="Pedido cancelado com sucesso", order_id=order_id)

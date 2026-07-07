@@ -19,16 +19,17 @@ sobrou.
 
 ## Status da implementação (jul/2026)
 
-Aplicada a fatia que **não muda o contrato observável consumido por frontend e
-mobile** (os clientes continuam funcionando), com a suíte `pytest` verde
-(100 passando). O que altera contrato de cliente ficou para PRs coordenados.
+Os quatro itens foram aplicados com a suíte `pytest` verde (113 passando). O
+item 2 foi feito de forma **aditiva** — só acrescenta `success`, mantendo as
+chaves já consumidas por frontend e mobile —, então nenhum cliente quebra e não
+foi preciso o deploy coordenado que se temia.
 
 | Item | Status | Observação |
 |------|--------|------------|
 | 1 — Autorização | 🟢 feito | `cart`, `orders` e `favorites` agora exigem **JWT** com identidade em `g.user_id` (dono-ou-admin); `X-User-Id`/`require_auth` removidos; escrita de `categories` exige admin. Corrigidos 2 bugs str-vs-int (`owner_or_admin_required` e `refresh_access_token`). Coordenado com mobile (JWT real) e frontend (Pedidos/Checkout via axios). |
-| 2 — Envelope de resposta | 🔴 pendente | Muda o corpo consumido por frontend/mobile; exige varredura conjunta. Não iniciado. |
+| 2 — Envelope de resposta | 🟢 feito | Helpers `ok()`/`err()` em `app/utils/responses.py`; todo controller/rota emite o envelope **plano** `{success, ...}`. **Aditivo**: só acrescenta `success` e mantém as chaves de domínio, logo os clientes seguem funcionando. Normalizados os `{error}` divergentes de `images_controller` **e dos decorators JWT** → `message` (frontend `api.js` ajustado). Listas puras (`/categories/summary`) ficam como exceção documentada. Contrato travado em `tests/test_envelope.py`. |
 | 3 — Boilerplate (`@require_db` + errorhandler) | 🟢 feito | Criado `@require_db` (`app/utils/decorators.py`) e `@app.errorhandler(Exception)` central. `try/except` genérico removido de `cart`/`orders`; **mantido** em `users`/`images` por serem fluxos sensíveis (o handler central já é a rede de segurança). |
-| 4 — Duplicação de infraestrutura | 🟢 feito | Extraídos `serialize_doc`, `next_sequence`, `get_pagination_params` e `_render_email` para `app/utils/`. `favorites` mantém `_id`→string (divergência do item 4 deixada para o PR do envelope). |
+| 4 — Duplicação de infraestrutura | 🟢 feito | Extraídos `serialize_doc`, `next_sequence`, `get_pagination_params` e `_render_email` para `app/utils/`. `favorites` ainda mantém `_id`→string — resíduo do item 4 (o `_id` não deveria vazar), **ortogonal ao envelope** e sem cliente que o consuma; deixado para um PR próprio de serialização. |
 
 > **Item 1 — coordenação de 3 apps.** O mobile não tinha JWT real (gravava a
 > string `'authenticated'`); foi refeito para armazenar/enviar o token
@@ -75,6 +76,13 @@ coordenados.
 ---
 
 ## 2. Envelope de resposta `{ success, message }` não seguido
+
+> ✅ **Resolvido.** Helpers `ok()`/`err()` em `app/utils/responses.py`; todos os
+> controllers e rotas passam por eles. A migração foi **aditiva** (só acrescenta
+> `success`, mantém as chaves de domínio), evitando o deploy coordenado que se
+> temia. As chaves `error` de `images_controller` e dos decorators JWT viraram
+> `message`. Contrato coberto por `tests/test_envelope.py`. O texto abaixo é o
+> diagnóstico original.
 
 **Problema.** O [`convencoes.md`](./convencoes.md) e os errorhandlers de
 `create_app` definem o envelope `{ "success": bool, "message": str, ... }`. Na
@@ -160,9 +168,20 @@ o formato canônico antes e ajustar o cliente onde necessário.
 
 ## Priorização sugerida
 
-1. **Item 1 (autorização)** — é segurança, não estética. Vem primeiro.
-2. **Item 3 (`@require_db` + errorhandler)** — só depois de ter `pytest`
-   rodando, pelo volume de pontos tocados.
+Ordem em que os itens foram efetivamente atacados (todos concluídos):
+
+1. **Item 1 (autorização)** — segurança, não estética. Veio primeiro.
+2. **Item 3 (`@require_db` + errorhandler)** — depois de `pytest` rodando, pelo
+   volume de pontos tocados.
 3. **Item 4 (helpers compartilhados)** — incremental, um helper por PR.
-4. **Item 2 (envelope de resposta)** — o mais acoplado ao cliente; encaixar no
-   mesmo esforço de padronização do item 4, por domínio.
+4. **Item 2 (envelope de resposta)** — resolvido de forma **aditiva** com os
+   helpers `ok()`/`err()`, o que dispensou a padronização por domínio com o
+   cliente acompanhando que se previa aqui.
+
+### Resíduo em aberto
+
+- **Serialização de `favorites` (`_id` string).** Cauda do item 4: os favoritos
+  ainda devolvem `_id` como string em vez de removê-lo como os demais. É
+  ortogonal ao envelope e hoje nenhum cliente lê esse campo; fica para um PR
+  próprio que unifique a serialização (adotar `serialize_doc`, que faz `pop` do
+  `_id`).

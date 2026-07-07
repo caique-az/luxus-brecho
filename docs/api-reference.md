@@ -18,17 +18,19 @@ Marcação usada abaixo:
 
 ## Convenções de resposta
 
-A maioria dos endpoints retorna um envelope:
+Todo endpoint responde no envelope **plano**: `success` é sempre o discriminador e os dados de domínio ficam no topo, ao lado dele (não aninhados sob `data`).
 
 ```json
-{ "success": true, "message": "...", "data": { } }
+{ "success": true, "message": "...", "items": [ ] }
 ```
 
-Alguns endpoints de listagem (produtos) retornam diretamente `items` + `pagination`. Erros seguem:
+Erros seguem o mesmo envelope, com a mensagem sempre em `message` (nunca `error`) e, quando for validação, `errors`:
 
 ```json
 { "success": false, "message": "erro de validação", "errors": { "campo": "motivo" } }
 ```
+
+Exceções (lista pura, sem envelope): `/categories/summary` retorna um array de categorias. As listagens de produtos retornam a coleção em `items` + `pagination` ao lado de `success`.
 
 Códigos comuns: `200` OK · `201` criado · `400` validação · `401` não autenticado · `403` sem permissão · `404` inexistente · `405` método inválido · `409` conflito (ID duplicado) · `413` arquivo grande · `503` banco indisponível.
 
