@@ -130,7 +130,7 @@ Cada fase é um bloco entregável e testável isoladamente. Faça **uma fase por
   - **(c)** Remover o seed do código e criar o admin por script/CLI fora do repositório.
   - Em qualquer caso, **corrigir o log** para refletir as credenciais reais.
 - **Critério de aceite:** nenhuma credencial de admin utilizável está hardcoded; o log não mente sobre e-mail/senha.
-- [ ] Concluído
+- [x] Concluído — opção (b): `create_default_admin` lê `ADMIN_EMAIL`/`ADMIN_PASSWORD` (sem default; sem eles não semeia). Senha validada pela política; log imprime o e-mail real e nunca a senha. `ADMIN_EMAIL`/`ADMIN_PASSWORD`/`ADMIN_NAME` adicionados ao `.env.example`.
 
 ---
 
