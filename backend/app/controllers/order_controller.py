@@ -106,22 +106,28 @@ def create_order(user_id: int):
         # Qualquer product_id inválido (não-int → injeção NoSQL) ou inexistente/
         # indisponível é rejeitado — nada de pular item e persistir total 0.
         products_coll = db["products"]
-        items_with_details = []
-        total = 0
-        product_ids_to_update = []
-        seen_ids = set()
 
+        # Coage e deduplica os product_ids (peça única), preservando a ordem —
+        # um product_id não-int (injeção NoSQL) rejeita o pedido inteiro.
+        requested_ids = []
         for item in payload.get("items", []):
             product_id = coerce_product_id(item.get("product_id"))
             if product_id is None:
                 return jsonify(message="product_id inválido no pedido"), 400
+            if product_id not in requested_ids:
+                requested_ids.append(product_id)
 
-            # Peça única: ignora repetição do mesmo produto no mesmo pedido.
-            if product_id in seen_ids:
-                continue
-            seen_ids.add(product_id)
+        # Uma única query para todos os produtos do pedido (evita N+1).
+        products_by_id = {
+            p["id"]: p for p in products_coll.find({"id": {"$in": requested_ids}})
+        }
 
-            product = products_coll.find_one({"id": product_id})
+        items_with_details = []
+        total = 0
+        product_ids_to_update = []
+
+        for product_id in requested_ids:
+            product = products_by_id.get(product_id)
             if not product:
                 return jsonify(message=f"Produto {product_id} não encontrado"), 404
 

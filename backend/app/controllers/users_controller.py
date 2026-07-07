@@ -25,6 +25,9 @@ import random
 # Nº máximo de tentativas do código de exclusão antes de invalidá-lo (anti-brute-force)
 MAX_DELETION_ATTEMPTS = 5
 
+# Campos removidos ao invalidar um código de exclusão (expirado ou tentativas esgotadas)
+_DELETION_UNSET = {"deletion_code": "", "deletion_code_expiration": "", "deletion_attempts": ""}
+
 
 def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
     """Serializa documento removendo campos internos."""
@@ -804,7 +807,7 @@ def confirm_account_deletion():
             # Limpa código expirado
             coll.update_one(
                 {"id": user_id},
-                {"$unset": {"deletion_code": "", "deletion_code_expiration": "", "deletion_attempts": ""}}
+                {"$unset": _DELETION_UNSET}
             )
             return jsonify(message="Código expirado. Solicite um novo código."), 410
 
@@ -815,7 +818,7 @@ def confirm_account_deletion():
                 # Excedeu o limite: invalida o código, forçando nova solicitação
                 coll.update_one(
                     {"id": user_id},
-                    {"$unset": {"deletion_code": "", "deletion_code_expiration": "", "deletion_attempts": ""}}
+                    {"$unset": _DELETION_UNSET}
                 )
                 return jsonify(message="Muitas tentativas inválidas. Solicite um novo código."), 429
             coll.update_one(

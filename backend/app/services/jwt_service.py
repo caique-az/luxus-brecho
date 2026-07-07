@@ -142,6 +142,18 @@ def _load_fresh_user(user_id: int):
     return user, None
 
 
+def _set_identity(user_id, user, payload):
+    """Popula g.user_id/user_type/user_email para a requisição.
+
+    Usa o `user` do banco (fonte da verdade) quando disponível e degrada para as
+    claims do token quando não há banco (ver `_load_fresh_user`). Centraliza o
+    fallback que antes era copiado nos três decorators.
+    """
+    g.user_id = user_id
+    g.user_type = user.get('tipo') if user else payload.get('type')
+    g.user_email = user.get('email') if user else payload.get('email')
+
+
 def jwt_required(f):
     """
     Decorator que exige autenticação JWT válida.
@@ -173,9 +185,7 @@ def jwt_required(f):
         if err:
             return err
 
-        g.user_id = user_id
-        g.user_type = user['tipo'] if user else payload.get('type')
-        g.user_email = user.get('email') if user else payload.get('email')
+        _set_identity(user_id, user, payload)
 
         return f(*args, **kwargs)
 
@@ -249,9 +259,7 @@ def admin_required(f):
         if user is not None and user.get('tipo') != 'Administrador':
             return jsonify({'error': 'Acesso negado. Requer privilégios de administrador'}), 403
 
-        g.user_id = user_id
-        g.user_type = user['tipo'] if user else payload.get('type')
-        g.user_email = user.get('email') if user else payload.get('email')
+        _set_identity(user_id, user, payload)
 
         return f(*args, **kwargs)
 
@@ -291,9 +299,7 @@ def owner_or_admin_required(user_id_param: str = 'user_id'):
             if err:
                 return err
 
-            g.user_id = user_id
-            g.user_type = user['tipo'] if user else payload.get('type')
-            g.user_email = user.get('email') if user else payload.get('email')
+            _set_identity(user_id, user, payload)
 
             # Verifica se é admin ou dono do recurso (comparação int vs int)
             resource_user_id = kwargs.get(user_id_param)

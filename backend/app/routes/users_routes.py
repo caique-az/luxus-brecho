@@ -149,26 +149,14 @@ users_bp.route("/summary", methods=["GET"])(get_users_summary)
 # Rotas de exclusão de conta (exigem JWT + posse via g.user_id, com rate limiting)
 @users_bp.route("/request-deletion", methods=["POST"])
 @jwt_required
+@_apply_rate_limit("5 per hour")  # 5 solicitações por hora
 def request_deletion_endpoint():
     """Solicita exclusão da própria conta - autenticado, com rate limiting."""
-    limiter = _get_limiter()
-    if limiter:
-        # 5 solicitações por hora
-        @limiter.limit("5 per hour")
-        def limited_request():
-            return request_account_deletion()
-        return limited_request()
     return request_account_deletion()
 
 @users_bp.route("/confirm-deletion", methods=["POST"])
 @jwt_required
+@_apply_rate_limit("10 per hour")  # 10 tentativas por hora
 def confirm_deletion_endpoint():
     """Confirma exclusão da própria conta - autenticado, com rate limiting."""
-    limiter = _get_limiter()
-    if limiter:
-        # 10 tentativas por hora
-        @limiter.limit("10 per hour")
-        def limited_confirm():
-            return confirm_account_deletion()
-        return limited_confirm()
     return confirm_account_deletion()

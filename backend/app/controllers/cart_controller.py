@@ -9,7 +9,6 @@ from bson import ObjectId
 from ..models.cart_model import (
     get_collection,
     normalize_cart,
-    validate_cart_item,
     coerce_product_id,
 )
 
@@ -106,17 +105,13 @@ def add_to_cart(user_id: int):
         # Verifica se o carrinho já existe
         cart = coll.find_one({"user_id": user_id})
 
-        # Peça única: o produto está ou não no carrinho. Re-adicionar é idempotente.
-        already_in_cart = bool(cart) and any(
-            item.get("product_id") == product_id for item in cart.get("items", [])
-        )
-        if already_in_cart:
-            return jsonify({
-                "message": "Produto já está no carrinho",
-                "product_id": product_id,
-            }), 200
-
         if cart:
+            # Peça única: se o produto já está no carrinho, re-adicionar é idempotente.
+            if any(item.get("product_id") == product_id for item in cart.get("items", [])):
+                return jsonify({
+                    "message": "Produto já está no carrinho",
+                    "product_id": product_id,
+                }), 200
             coll.update_one(
                 {"user_id": user_id},
                 {
