@@ -1,7 +1,7 @@
 """
 Rotas para gerenciar favoritos dos usuários.
-Autenticação via JWT (`Authorization: Bearer`); a identidade do usuário vem de
-``g.user_id`` (int) — não mais de um header ``X-User-Id`` falsificável.
+Autenticação via JWT (Authorization: Bearer <token>); a identidade do usuário
+vem de g.user_id — não mais de um header X-User-Id falsificável.
 """
 from flask import Blueprint, g
 from app.controllers.favorites_controller import (

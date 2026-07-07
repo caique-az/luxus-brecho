@@ -19,17 +19,24 @@ sobrou.
 
 ## Status da implementação (jul/2026)
 
-Os quatro itens foram aplicados com a suíte `pytest` verde (113 passando). O
-item 2 foi feito de forma **aditiva** — só acrescenta `success`, mantendo as
-chaves já consumidas por frontend e mobile —, então nenhum cliente quebra e não
-foi preciso o deploy coordenado que se temia.
+Os quatro itens foram aplicados com a suíte `pytest` verde. O item 2 foi feito
+de forma **aditiva** — só acrescenta `success`, mantendo as chaves já consumidas
+por frontend e mobile —, então nenhum cliente quebra e não foi preciso o deploy
+coordenado que se temia.
+
+> **Nota pós-merge.** Esta branch foi mesclada com a `main`, que trouxe a **Fase
+> 6** de uma revisão paralela (itens 1/3/4/5 endurecidos: guarda anti-injeção
+> NoSQL, frescor de privilégio no JWT, `require_db` em `app/utils/db.py`,
+> `parse_pagination`, factory que falha rápido). O envelope (item 2) foi
+> **reaplicado sobre a versão da `main`** desses itens. Suíte após o merge: **193
+> passando**.
 
 | Item | Status | Observação |
 |------|--------|------------|
 | 1 — Autorização | 🟢 feito | `cart`, `orders` e `favorites` agora exigem **JWT** com identidade em `g.user_id` (dono-ou-admin); `X-User-Id`/`require_auth` removidos; escrita de `categories` exige admin. Corrigidos 2 bugs str-vs-int (`owner_or_admin_required` e `refresh_access_token`). Coordenado com mobile (JWT real) e frontend (Pedidos/Checkout via axios). |
 | 2 — Envelope de resposta | 🟢 feito | Helpers `ok()`/`err()` em `app/utils/responses.py`; todo controller/rota emite o envelope **plano** `{success, ...}`. **Aditivo**: só acrescenta `success` e mantém as chaves de domínio, logo os clientes seguem funcionando. Normalizados os `{error}` divergentes de `images_controller` **e dos decorators JWT** → `message` (frontend `api.js` ajustado). Listas puras (`/categories/summary`) ficam como exceção documentada. Contrato travado em `tests/test_envelope.py`. |
-| 3 — Boilerplate (`@require_db` + errorhandler) | 🟢 feito | Criado `@require_db` (`app/utils/decorators.py`) e `@app.errorhandler(Exception)` central. `try/except` genérico removido de `cart`/`orders`; **mantido** em `users`/`images` por serem fluxos sensíveis (o handler central já é a rede de segurança). |
-| 4 — Duplicação de infraestrutura | 🟢 feito | Extraídos `serialize_doc`, `next_sequence`, `get_pagination_params` e `_render_email` para `app/utils/`. `favorites` ainda mantém `_id`→string — resíduo do item 4 (o `_id` não deveria vazar), **ortogonal ao envelope** e sem cliente que o consuma; deixado para um PR próprio de serialização. |
+| 3 — Boilerplate (`@require_db` + errorhandler) | 🟢 feito | `@require_db` em `app/utils/db.py` (padroniza o 503, agora no envelope) e `@app.errorhandler(Exception)` central. Pós-merge, `cart`/`orders` seguem a abordagem da `main` (mantêm `try/except` local, com o handler central como rede de segurança adicional). |
+| 4 — Duplicação de infraestrutura | 🟢 feito | Extraídos `serialize_doc`, `next_sequence`, `parse_pagination` e `_render_email` para `app/utils/`. O resíduo do `_id` em `favorites` foi **resolvido no merge**: a `main` usa `serialize_doc` (que faz `pop` do `_id`), então o `_id` não vaza mais. |
 
 > **Item 1 — coordenação de 3 apps.** O mobile não tinha JWT real (gravava a
 > string `'authenticated'`); foi refeito para armazenar/enviar o token
@@ -180,8 +187,6 @@ Ordem em que os itens foram efetivamente atacados (todos concluídos):
 
 ### Resíduo em aberto
 
-- **Serialização de `favorites` (`_id` string).** Cauda do item 4: os favoritos
-  ainda devolvem `_id` como string em vez de removê-lo como os demais. É
-  ortogonal ao envelope e hoje nenhum cliente lê esse campo; fica para um PR
-  próprio que unifique a serialização (adotar `serialize_doc`, que faz `pop` do
-  `_id`).
+- Nenhum. A cauda do item 4 (serialização de `favorites` vazando `_id`) foi
+  resolvida no merge com a `main`, que passou a usar `serialize_doc` (com `pop`
+  do `_id`) também em favoritos.

@@ -1,12 +1,16 @@
 from __future__ import annotations
-from flask import request, current_app
+from flask import request, current_app, g
+from app.utils.db import require_db
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 from typing import Any, Dict
+import re
 import time
 import secrets
 from datetime import datetime, timedelta
 
+from ..utils.pagination import parse_pagination
+from ..utils.responses import ok, err
 from ..models.user_model import (
     get_collection,
     prepare_new_user,
@@ -20,10 +24,13 @@ from ..models.user_model import (
 )
 from ..services.email_service import send_confirmation_email, send_welcome_email, send_password_reset_email, send_account_deletion_code
 from ..services.jwt_service import create_access_token, create_refresh_token, refresh_access_token, JWT_ACCESS_TOKEN_EXPIRES
-from ..utils.pagination import get_pagination_params
-from ..utils.decorators import require_db
-from ..utils.responses import ok, err
 import random
+
+# Nº máximo de tentativas do código de exclusão antes de invalidá-lo (anti-brute-force)
+MAX_DELETION_ATTEMPTS = 5
+
+# Campos removidos ao invalidar um código de exclusão (expirado ou tentativas esgotadas)
+_DELETION_UNSET = {"deletion_code": "", "deletion_code_expiration": "", "deletion_attempts": ""}
 
 
 def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -41,8 +48,8 @@ def list_users():
     coll = get_collection(db)
 
     try:
-        # Parâmetros de paginação
-        page, page_size = get_pagination_params()
+        # Paginação com clamp (page_size limitado; evita .limit() ilimitado)
+        page, page_size, skip = parse_pagination(default_page_size=20)
 
         # Parâmetros de filtro
         tipo = request.args.get("tipo")
@@ -51,26 +58,28 @@ def list_users():
 
         # Constrói filtro
         filter_query = {}
-        
+
         if tipo and tipo in USER_TYPES:
             filter_query["tipo"] = tipo
-        
+
         if ativo is not None:
             filter_query["ativo"] = ativo.lower() == "true"
-        
+
         if search:
+            # Escapa o termo: sem isso, um input como "(a+)+$" vira regex e
+            # abre ReDoS (mesmo restrito a admin autenticado).
+            safe_search = re.escape(search)
             filter_query["$or"] = [
-                {"nome": {"$regex": search, "$options": "i"}},
-                {"email": {"$regex": search, "$options": "i"}}
+                {"nome": {"$regex": safe_search, "$options": "i"}},
+                {"email": {"$regex": safe_search, "$options": "i"}}
             ]
 
         # Contagem total
         total = coll.count_documents(filter_query)
 
         # Busca com paginação
-        skip = (page - 1) * page_size
         cursor = coll.find(filter_query).sort("data_criacao", -1).skip(skip).limit(page_size)
-        
+
         users = [_serialize(doc) for doc in cursor]
 
         return ok({
@@ -108,15 +117,37 @@ def get_user(id: int):
         return err("Erro interno do servidor", 500)
 
 
-@require_db
 def create_user():
-    """Cria novo usuário."""
+    """Registro público de usuário.
+
+    Sempre cria um Cliente: o `tipo` do payload é ignorado para impedir o
+    auto-registro como administrador (escalada de privilégio). A criação de
+    administradores tem um caminho próprio, protegido por @admin_required
+    (ver create_admin / rota POST /api/users/admin).
+    """
+    return _create_user_with_tipo("Cliente")
+
+
+def create_admin():
+    """Cria um administrador. A rota é protegida por @admin_required: só um
+    admin autenticado consegue criar outro admin."""
+    return _create_user_with_tipo("Administrador")
+
+
+@require_db
+def _create_user_with_tipo(tipo: str):
+    """Núcleo de criação de usuário. O `tipo` é imposto pelo chamador (nunca vem
+    do corpo da requisição), o que garante que o privilégio seja definido pela
+    rota — não pelo cliente."""
     db = current_app.db
 
     try:
         payload = request.get_json()
         if not payload:
             return err("Payload JSON é obrigatório")
+
+        # O privilégio nunca é decidido pelo payload: o tipo é imposto pela rota.
+        payload["tipo"] = tipo
 
         # Valida payload
         is_valid, error_msg = validate_user_payload(payload)
@@ -135,10 +166,10 @@ def create_user():
 
         # Insere no banco
         result = coll.insert_one(user_data)
-        
+
         # Busca usuário criado
         created_user = coll.find_one({"_id": result.inserted_id})
-        
+
         # Envia email de confirmação
         if user_data["token_confirmacao"]:
             is_admin = user_data["tipo"] == "Administrador"
@@ -154,12 +185,12 @@ def create_user():
                 message = "Usuário criado com sucesso. Verifique seu email para confirmar a conta."
         else:
             message = "Usuário criado com sucesso"
-        
+
         return ok(
             message=message,
             status=201,
             user=_serialize(created_user),
-            email_confirmation_required=user_data["tipo"] == "Cliente",
+            email_confirmation_required=user_data["tipo"] == "Cliente"
         )
 
     except DuplicateKeyError as e:
@@ -217,7 +248,10 @@ def update_user(id: int):
         # Busca usuário atualizado
         updated_user = coll.find_one({"id": id})
 
-        return ok(message="Usuário atualizado com sucesso", user=_serialize(updated_user))
+        return ok(
+            message="Usuário atualizado com sucesso",
+            user=_serialize(updated_user)
+        )
 
     except DuplicateKeyError as e:
         if "email" in str(e):
@@ -300,7 +334,7 @@ def authenticate_user():
             return err(
                 "Email não confirmado. Verifique sua caixa de entrada.",
                 403,
-                email_not_confirmed=True,
+                email_not_confirmed=True
             )
 
         # Verifica se o usuário está ativo
@@ -321,7 +355,7 @@ def authenticate_user():
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="Bearer",
-            expires_in=int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds()),
+            expires_in=int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds())
         )
 
     except Exception as e:
@@ -409,7 +443,10 @@ def change_password(id: int):
 
 def get_user_types():
     """Retorna tipos de usuário disponíveis."""
-    return ok(message="Tipos de usuário disponíveis", types=USER_TYPES)
+    return ok(
+        message="Tipos de usuário disponíveis",
+        types=USER_TYPES
+    )
 
 
 @require_db
@@ -430,7 +467,7 @@ def get_users_summary():
         ]
 
         result = list(coll.aggregate(pipeline))
-        
+
         summary = {}
         for item in result:
             summary[item["_id"]] = item["count"]
@@ -445,7 +482,7 @@ def get_users_summary():
         return ok(
             message="Resumo de usuários obtido com sucesso",
             summary=summary,
-            total=total_users,
+            total=total_users
         )
 
     except Exception as e:
@@ -530,7 +567,7 @@ def resend_confirmation_email():
 
         # Gera novo token
         from ..models.user_model import generate_confirmation_token, get_token_expiration
-        
+
         new_token = generate_confirmation_token()
         new_expiration = get_token_expiration()
 
@@ -567,7 +604,7 @@ def forgot_password():
             return err("Payload JSON é obrigatório")
 
         email = payload.get("email", "").strip().lower()
-        
+
         if not email:
             return err("Email é obrigatório")
 
@@ -575,13 +612,13 @@ def forgot_password():
 
         # Busca usuário pelo email
         user = coll.find_one({"email": email, "ativo": True})
-        
+
         # Por segurança, sempre retorna sucesso mesmo se email não existir
         if user:
             # Gera token único de recuperação
             reset_token = secrets.token_urlsafe(32)
             reset_expiration = datetime.utcnow() + timedelta(hours=1)  # Expira em 1 hora
-            
+
             # Salva token no banco
             coll.update_one(
                 {"id": user["id"]},
@@ -591,10 +628,10 @@ def forgot_password():
                     "data_atualizacao": datetime.utcnow()
                 }}
             )
-            
+
             # Envia email com link de recuperação
             send_password_reset_email(user["email"], user["nome"], reset_token)
-            
+
             current_app.logger.info(f"Email de recuperação enviado para {email}")
         else:
             current_app.logger.warning(f"Email {email} não encontrado, mas retornando sucesso por segurança")
@@ -670,50 +707,53 @@ def reset_password():
 
 @require_db
 def request_account_deletion():
-    """Solicita exclusão de conta - envia código de 6 dígitos por email."""
+    """Solicita exclusão de conta - envia código de 6 dígitos por email.
+
+    Requer autenticação (@jwt_required na rota): o alvo é sempre o próprio
+    usuário logado (g.user_id), nunca um id vindo do corpo da requisição.
+    """
     db = current_app.db
 
     try:
-        payload = request.get_json()
-        if not payload:
-            return err("Payload JSON é obrigatório")
-
-        user_id = payload.get("user_id")
-        if not user_id:
-            return err("ID do usuário é obrigatório")
+        # Identidade vem do token (int garantido por jwt_required), não do corpo.
+        user_id = g.user_id
 
         coll = get_collection(db)
 
         # Busca usuário
-        user = coll.find_one({"id": int(user_id), "ativo": True})
+        user = coll.find_one({"id": user_id, "ativo": True})
         if not user:
             return err("Usuário não encontrado", 404)
 
         # Gera código de 6 dígitos
         deletion_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
-        
+
         # Define expiração (30 minutos)
         code_expiration = datetime.utcnow() + timedelta(minutes=30)
 
-        # Salva código no banco
+        # Salva código no banco (zera o contador de tentativas de uma solicitação anterior)
         coll.update_one(
-            {"id": int(user_id)},
+            {"id": user_id},
             {"$set": {
                 "deletion_code": deletion_code,
                 "deletion_code_expiration": code_expiration,
+                "deletion_attempts": 0,
                 "data_atualizacao": datetime.utcnow()
             }}
         )
 
         # Envia email com código
         email_sent = send_account_deletion_code(user["email"], user["nome"], deletion_code)
-        
+
         if not email_sent:
             return err("Erro ao enviar email. Tente novamente.", 500)
 
         current_app.logger.info(f"Código de exclusão enviado para {user['email']}")
 
-        return ok(message="Código de verificação enviado para seu email", email_sent=True)
+        return ok(
+            message="Código de verificação enviado para seu email",
+            email_sent=True
+        )
 
     except Exception as e:
         current_app.logger.error(f"Erro ao solicitar exclusão de conta: {e}")
@@ -722,7 +762,13 @@ def request_account_deletion():
 
 @require_db
 def confirm_account_deletion():
-    """Confirma exclusão de conta com código de 6 dígitos."""
+    """Confirma exclusão de conta com código de 6 dígitos.
+
+    Requer autenticação (@jwt_required na rota): o alvo é sempre o próprio
+    usuário logado (g.user_id). O código é comparado em tempo constante e é
+    invalidado após MAX_DELETION_ATTEMPTS tentativas erradas, para impedir
+    força bruta sobre os 6 dígitos.
+    """
     db = current_app.db
 
     try:
@@ -730,16 +776,17 @@ def confirm_account_deletion():
         if not payload:
             return err("Payload JSON é obrigatório")
 
-        user_id = payload.get("user_id")
+        # Identidade vem do token (int garantido por jwt_required), não do corpo.
+        user_id = g.user_id
         code = payload.get("code")
 
-        if not user_id or not code:
-            return err("ID do usuário e código são obrigatórios")
+        if not code:
+            return err("Código é obrigatório")
 
         coll = get_collection(db)
 
         # Busca usuário
-        user = coll.find_one({"id": int(user_id), "ativo": True})
+        user = coll.find_one({"id": user_id, "ativo": True})
         if not user:
             return err("Usuário não encontrado", 404)
 
@@ -751,24 +798,39 @@ def confirm_account_deletion():
         if user.get("deletion_code_expiration") and user["deletion_code_expiration"] < datetime.utcnow():
             # Limpa código expirado
             coll.update_one(
-                {"id": int(user_id)},
-                {"$unset": {"deletion_code": "", "deletion_code_expiration": ""}}
+                {"id": user_id},
+                {"$unset": _DELETION_UNSET}
             )
             return err("Código expirado. Solicite um novo código.", 410)
 
-        # Verifica se o código está correto
-        if user["deletion_code"] != code:
+        # Verifica o código em tempo constante (evita side-channel por timing)
+        if not secrets.compare_digest(str(user["deletion_code"]), str(code)):
+            attempts = int(user.get("deletion_attempts", 0)) + 1
+            if attempts >= MAX_DELETION_ATTEMPTS:
+                # Excedeu o limite: invalida o código, forçando nova solicitação
+                coll.update_one(
+                    {"id": user_id},
+                    {"$unset": _DELETION_UNSET}
+                )
+                return err("Muitas tentativas inválidas. Solicite um novo código.", 429)
+            coll.update_one(
+                {"id": user_id},
+                {"$set": {"deletion_attempts": attempts}}
+            )
             return err("Código inválido")
 
         # Exclui a conta permanentemente
-        result = coll.delete_one({"id": int(user_id)})
+        result = coll.delete_one({"id": user_id})
 
         if result.deleted_count == 0:
             return err("Erro ao excluir conta", 500)
 
         current_app.logger.info(f"Conta do usuário ID {user_id} excluída permanentemente")
 
-        return ok(message="Conta excluída com sucesso", deleted=True)
+        return ok(
+            message="Conta excluída com sucesso",
+            deleted=True
+        )
 
     except Exception as e:
         current_app.logger.error(f"Erro ao confirmar exclusão de conta: {e}")

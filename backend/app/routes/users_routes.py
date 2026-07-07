@@ -3,6 +3,7 @@ from app.controllers.users_controller import (
     list_users,
     get_user,
     create_user,
+    create_admin,
     update_user,
     delete_user,
     authenticate_user,
@@ -54,8 +55,15 @@ def get_user_endpoint(id):
     """Busca usuário - dono ou admin."""
     return get_user(id)
 
-# Criação de usuário é pública (registro)
+# Criação de usuário é pública (registro) — sempre cria Cliente
 users_bp.route("/", methods=["POST"])(create_user)
+
+# Criação de administrador: apenas por outro admin autenticado
+@users_bp.route("/admin", methods=["POST"])
+@admin_required
+def create_admin_endpoint():
+    """Cria um administrador - apenas admin."""
+    return create_admin()
 
 @users_bp.route("/<int:id>", methods=["PUT"])
 @owner_or_admin_required('id')
@@ -114,6 +122,17 @@ def resend_confirmation_endpoint():
 users_bp.route("/types", methods=["GET"])(get_user_types)
 users_bp.route("/summary", methods=["GET"])(get_users_summary)
 
-# Rotas de exclusão de conta
-users_bp.route("/request-deletion", methods=["POST"])(request_account_deletion)
-users_bp.route("/confirm-deletion", methods=["POST"])(confirm_account_deletion)
+# Rotas de exclusão de conta (exigem JWT + posse via g.user_id, com rate limiting)
+@users_bp.route("/request-deletion", methods=["POST"])
+@jwt_required
+@_apply_rate_limit("5 per hour")  # 5 solicitações por hora
+def request_deletion_endpoint():
+    """Solicita exclusão da própria conta - autenticado, com rate limiting."""
+    return request_account_deletion()
+
+@users_bp.route("/confirm-deletion", methods=["POST"])
+@jwt_required
+@_apply_rate_limit("10 per hour")  # 10 tentativas por hora
+def confirm_deletion_endpoint():
+    """Confirma exclusão da própria conta - autenticado, com rate limiting."""
+    return confirm_account_deletion()

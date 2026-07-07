@@ -1,14 +1,14 @@
 from __future__ import annotations
 from flask import Blueprint, request, current_app
+from app.utils.db import require_db
 from pymongo.errors import DuplicateKeyError
+from bson import ObjectId
 from typing import Any, Dict
 from marshmallow import Schema, fields, ValidationError
 import time
+from functools import wraps
 
 from ..services.jwt_service import jwt_optional, admin_required
-from ..utils.serialization import serialize_doc
-from ..utils.pagination import get_pagination_params
-from ..utils.decorators import require_db
 from ..utils.responses import ok, err
 
 class ProductQuerySchema(Schema):
@@ -24,6 +24,7 @@ from ..models.product_model import (
     normalize_product,
 )
 from ..services.supabase_storage import storage_service
+from ..utils.serialization import serialize_doc as _serialize
 
 # Create the Blueprint
 products_bp = Blueprint('products', __name__)
@@ -63,7 +64,7 @@ def list_products():
     total = coll.count_documents(query)
 
     items = [
-        serialize_doc(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
+        _serialize(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
     ]
 
     return ok({
@@ -87,7 +88,7 @@ def get_product(id: int):
     if not doc:
         return err("produto não encontrado", 404)
 
-    return ok(serialize_doc(doc))
+    return ok(_serialize(doc))
 
 @products_bp.route('/', methods=['POST'])
 @admin_required
@@ -108,7 +109,7 @@ def create_product():
     except DuplicateKeyError:
         return err("ID já existente", 409)
 
-    return ok(serialize_doc(doc), status=201)
+    return ok(_serialize(doc), status=201)
 
 @products_bp.route('/<int:id>', methods=['PUT'])
 @admin_required
@@ -126,7 +127,8 @@ def update_product(id: int):
     payload = request.get_json(silent=True) or {}
 
     # Merge parcial
-    merged = serialize_doc(current)
+    merged = dict(current)
+    merged.pop("_id", None)
     merged.update(payload)
     merged = normalize_product(merged)
 
@@ -140,7 +142,7 @@ def update_product(id: int):
     coll.update_one({"id": int(id)}, {"$set": merged})
     updated = coll.find_one({"id": int(id)})
 
-    return ok(serialize_doc(updated))
+    return ok(_serialize(updated))
 
 @products_bp.route('/<int:id>', methods=['DELETE'])
 @admin_required
@@ -280,7 +282,7 @@ def create_product_with_image():
             storage_service.delete_image(result)
             return err("ID já existente", 409)
 
-        return ok(message="Produto criado com sucesso", status=201, product=serialize_doc(product_doc))
+        return ok(message="Produto criado com sucesso", status=201, product=_serialize(product_doc))
 
     except Exception as e:
         current_app.logger.error(f"Erro ao criar produto com imagem: {e}")
@@ -334,7 +336,7 @@ def update_product_image(id: int):
 
         # Return updated product
         updated_product = coll.find_one({"id": int(id)})
-        return ok(message="Imagem atualizada com sucesso", product=serialize_doc(updated_product))
+        return ok(message="Imagem atualizada com sucesso", product=_serialize(updated_product))
 
     except Exception as e:
         current_app.logger.error(f"Erro ao atualizar imagem: {e}")
@@ -348,14 +350,15 @@ def get_products_by_category(categoria: str):
 
     coll = get_collection(db)
 
-    page, page_size = get_pagination_params()
+    page = max(int(request.args.get("page", 1) or 1), 1)
+    page_size = min(max(int(request.args.get("page_size", 20) or 20), 1), 100)
 
     query = {"categoria": categoria}
     cursor = coll.find(query).sort("titulo", 1)
     total = coll.count_documents(query)
 
     items = [
-        serialize_doc(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
+        _serialize(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
     ]
 
     if not items:

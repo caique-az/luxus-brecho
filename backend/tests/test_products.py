@@ -67,7 +67,7 @@ class TestProductCreate:
     """Testes para criação de produtos."""
     
     def test_create_product_success(self, client, mock_db, sample_category, admin_headers):
-        """Testa criação de produto com sucesso."""
+        """Testa criação de produto com sucesso (rota exige admin)."""
         # Configura counter e categoria
         mock_db["counters"].insert_one({"name": "products", "seq": 0})
         mock_db["categories"].insert_one(sample_category)
@@ -84,13 +84,13 @@ class TestProductCreate:
             "/api/products",
             data=json.dumps(product_data),
             content_type="application/json",
-            headers=admin_headers
+            headers=admin_headers,
         )
 
         assert response.status_code in [200, 201]
     
     def test_create_product_missing_fields(self, client, mock_db, admin_headers):
-        """Testa criação sem campos obrigatórios."""
+        """Testa criação sem campos obrigatórios (rota exige admin)."""
         product_data = {
             "titulo": "Produto Incompleto",
         }
@@ -99,13 +99,13 @@ class TestProductCreate:
             "/api/products",
             data=json.dumps(product_data),
             content_type="application/json",
-            headers=admin_headers
+            headers=admin_headers,
         )
 
         assert response.status_code == 400
     
     def test_create_product_invalid_price(self, client, mock_db, admin_headers):
-        """Testa criação com preço inválido."""
+        """Testa criação com preço inválido (rota exige admin)."""
         mock_db["counters"].insert_one({"_id": "products", "seq": 0})
 
         product_data = {
@@ -119,7 +119,7 @@ class TestProductCreate:
             "/api/products",
             data=json.dumps(product_data),
             content_type="application/json",
-            headers=admin_headers
+            headers=admin_headers,
         )
 
         assert response.status_code == 400
@@ -151,7 +151,7 @@ class TestProductUpdate:
     """Testes para atualização de produtos."""
     
     def test_update_product_success(self, client, mock_db, sample_product, sample_category, admin_headers):
-        """Testa atualização de produto com sucesso."""
+        """Testa atualização de produto com sucesso (rota exige admin)."""
         mock_db["products"].insert_one(sample_product)
         mock_db["categories"].insert_one(sample_category)
 
@@ -164,13 +164,13 @@ class TestProductUpdate:
             f"/api/products/{sample_product['id']}",
             data=json.dumps(update_data),
             content_type="application/json",
-            headers=admin_headers
+            headers=admin_headers,
         )
 
         assert response.status_code == 200
     
     def test_update_product_not_found(self, client, mock_db, admin_headers):
-        """Testa atualização de produto inexistente."""
+        """Testa atualização de produto inexistente (rota exige admin)."""
         update_data = {
             "titulo": "Título Atualizado",
         }
@@ -179,13 +179,13 @@ class TestProductUpdate:
             "/api/products/99999",
             data=json.dumps(update_data),
             content_type="application/json",
-            headers=admin_headers
+            headers=admin_headers,
         )
 
         assert response.status_code == 404
     
     def test_update_product_status(self, client, mock_db, sample_product, sample_category, admin_headers):
-        """Testa atualização de status do produto."""
+        """Testa atualização de status do produto (rota exige admin)."""
         mock_db["products"].insert_one(sample_product)
         mock_db["categories"].insert_one(sample_category)
 
@@ -197,7 +197,7 @@ class TestProductUpdate:
             f"/api/products/{sample_product['id']}",
             data=json.dumps(update_data),
             content_type="application/json",
-            headers=admin_headers
+            headers=admin_headers,
         )
 
         assert response.status_code == 200
@@ -207,22 +207,18 @@ class TestProductDelete:
     """Testes para exclusão de produtos."""
     
     def test_delete_product_success(self, client, mock_db, sample_product, admin_headers):
-        """Testa exclusão de produto."""
+        """Testa exclusão de produto (rota exige admin)."""
         mock_db["products"].insert_one(sample_product)
 
         response = client.delete(
-            f"/api/products/{sample_product['id']}",
-            headers=admin_headers
+            f"/api/products/{sample_product['id']}", headers=admin_headers
         )
 
         assert response.status_code == 200
     
     def test_delete_product_not_found(self, client, mock_db, admin_headers):
-        """Testa exclusão de produto inexistente."""
-        response = client.delete(
-            "/api/products/99999",
-            headers=admin_headers
-        )
+        """Testa exclusão de produto inexistente (rota exige admin)."""
+        response = client.delete("/api/products/99999", headers=admin_headers)
 
         assert response.status_code == 404
 

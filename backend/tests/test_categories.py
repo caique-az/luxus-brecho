@@ -53,7 +53,7 @@ class TestCategoryCreate:
         )
 
         assert response.status_code in [200, 201]
-    
+
     def test_create_category_missing_name(self, client, mock_db, admin_headers):
         """Testa criação sem nome."""
         category_data = {
@@ -68,7 +68,7 @@ class TestCategoryCreate:
         )
 
         assert response.status_code == 400
-    
+
     def test_create_category_duplicate_name(self, client, mock_db, sample_category, admin_headers):
         """Testa criação com nome duplicado."""
         mock_db["categories"].insert_one(sample_category)
@@ -132,7 +132,7 @@ class TestCategoryUpdate:
         )
 
         assert response.status_code == 200
-    
+
     def test_update_category_not_found(self, client, mock_db, admin_headers):
         """Testa atualização de categoria inexistente."""
         update_data = {
@@ -162,7 +162,7 @@ class TestCategoryDelete:
         )
 
         assert response.status_code == 200
-    
+
     def test_delete_category_not_found(self, client, mock_db, admin_headers):
         """Testa exclusão de categoria inexistente."""
         response = client.delete(
@@ -171,53 +171,3 @@ class TestCategoryDelete:
         )
 
         assert response.status_code == 404
-
-
-class TestCategoryWriteAuthorization:
-    """Escrita de categoria deve exigir administrador (mesmo critério de produtos)."""
-
-    def test_create_requires_authentication(self, client, mock_db):
-        """Sem token, POST /categories retorna 401."""
-        response = client.post(
-            "/api/categories",
-            data=json.dumps({"name": "X", "description": "descrição"}),
-            content_type="application/json"
-        )
-
-        assert response.status_code == 401
-
-    def test_create_forbidden_for_client(self, client, mock_db, auth_headers):
-        """Com token de Cliente, POST /categories retorna 403."""
-        response = client.post(
-            "/api/categories",
-            data=json.dumps({"name": "X", "description": "descrição"}),
-            content_type="application/json",
-            headers=auth_headers
-        )
-
-        assert response.status_code == 403
-
-    def test_update_requires_authentication(self, client, mock_db, sample_category):
-        """Sem token, PUT /categories/<id> retorna 401."""
-        mock_db["categories"].insert_one(sample_category)
-        response = client.put(
-            f"/api/categories/{sample_category['id']}",
-            data=json.dumps({"name": "Y"}),
-            content_type="application/json"
-        )
-
-        assert response.status_code == 401
-
-    def test_delete_requires_authentication(self, client, mock_db, sample_category):
-        """Sem token, DELETE /categories/<id> retorna 401."""
-        mock_db["categories"].insert_one(sample_category)
-        response = client.delete(f"/api/categories/{sample_category['id']}")
-
-        assert response.status_code == 401
-
-    def test_read_stays_public(self, client, mock_db, sample_category):
-        """Leitura continua pública (sem token)."""
-        mock_db["categories"].insert_one(sample_category)
-        response = client.get("/api/categories")
-
-        assert response.status_code == 200

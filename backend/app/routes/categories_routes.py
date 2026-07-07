@@ -17,7 +17,7 @@ categories_bp.route("/", methods=["GET"])(list_categories)
 categories_bp.route("/<int:id>", methods=["GET"])(get_category)
 categories_bp.route("/summary", methods=["GET"])(get_categories_summary)
 
-# Escrita restrita a administradores (mesmo critério do CRUD de produtos)
+# Mutações — apenas admin
 categories_bp.route("/", methods=["POST"])(admin_required(create_category))
 categories_bp.route("/<int:id>", methods=["PUT"])(admin_required(update_category))
 categories_bp.route("/<int:id>", methods=["DELETE"])(admin_required(delete_category))

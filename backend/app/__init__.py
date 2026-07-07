@@ -94,14 +94,27 @@ def create_app():
     # Rate Limiting para endpoints sensíveis
     limiter = None
     if HAS_LIMITER:
+        # Storage configurável: em múltiplos workers/serverless (Vercel), o
+        # padrão memory:// não compartilha contadores entre processos e zera a
+        # cada restart, enfraquecendo a proteção de brute-force. Aponte
+        # RATELIMIT_STORAGE_URI para um storage compartilhado (ex.: redis://) em
+        # produção.
+        storage_uri = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
         limiter = Limiter(
             key_func=get_remote_address,
             app=app,
             default_limits=["200 per day", "50 per hour"],
-            storage_uri="memory://",
+            storage_uri=storage_uri,
         )
         app.limiter = limiter
-        app.logger.info("✅ Rate limiting habilitado")
+        if storage_uri.startswith("memory://"):
+            app.logger.warning(
+                "⚠️  Rate limiting em memory:// — contadores não são compartilhados "
+                "entre workers e zeram a cada restart. Defina RATELIMIT_STORAGE_URI "
+                "(ex.: redis://...) em produção."
+            )
+        else:
+            app.logger.info(f"✅ Rate limiting habilitado (storage: {storage_uri})")
     else:
         app.limiter = None
     
@@ -125,13 +138,12 @@ def create_app():
          resources={r"/*": {"origins": allowed_origins}},
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
          allow_headers=[
-             'Content-Type', 
+             'Content-Type',
              'Authorization',
              'Accept',
              'Accept-Encoding',
              'X-Client-Version',
              'X-Requested-With',
-             'X-User-Id',
              'Origin'
          ],
          expose_headers=['Content-Length', 'Content-Encoding'],
@@ -255,12 +267,14 @@ def create_app():
             blueprint = getattr(module, blueprint_name)
             app.register_blueprint(blueprint, url_prefix=url_prefix)
             print(f"✅ {blueprint_name} registrado em {url_prefix}")
-        except ImportError as e:
-            print(f"⚠️  Erro ao importar {module_path}: {e}")
-        except AttributeError as e:
-            print(f"⚠️  Blueprint {blueprint_name} não encontrado em {module_path}: {e}")
         except Exception as e:
-            print(f"❌ Erro inesperado ao registrar {blueprint_name}: {e}")
+            # Todos os blueprints acima são obrigatórios. Engolir o erro com um
+            # print removeria a feature inteira silenciosamente (uma API mutilada
+            # que responde 404 onde deveria funcionar). Falha rápido no startup.
+            raise RuntimeError(
+                f"Falha ao registrar o blueprint obrigatório {blueprint_name} "
+                f"({module_path}): {e}"
+            ) from e
     
     # Error handlers
     @app.errorhandler(404)

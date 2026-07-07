@@ -10,6 +10,12 @@ from unittest.mock import MagicMock, patch
 # Adiciona o diretório raiz ao path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# A partir da Fase 1, jwt_service falha no import sem JWT_SECRET_KEY. Em CI (sem
+# .env) isso quebraria a coleta dos testes já no import da app. Garante um valor
+# determinístico ANTES de importar a app; setdefault preserva um valor real já
+# presente no ambiente (ex.: quando roda localmente com .env carregado).
+os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key-nao-usar-em-producao")
+
 from app import create_app
 
 
@@ -112,6 +118,9 @@ class MockCollection:
         if doc:
             if "$set" in update:
                 doc.update(update["$set"])
+            if "$unset" in update:
+                for key in update["$unset"]:
+                    doc.pop(key, None)
             if "$inc" in update:
                 for key, value in update["$inc"].items():
                     doc[key] = doc.get(key, 0) + value
@@ -142,29 +151,24 @@ class MockCollection:
         else:
             result.matched_count = 0
             result.modified_count = 0
-
+        
         return result
-
-    def update_many(self, query, update, upsert=False):
-        matched = list(self.find(query))
+    
+    def update_many(self, query, update, upsert=False, **kwargs):
+        # Usa find() (suporta $in) para pegar todos os documentos que casam.
         result = MagicMock()
-        for doc in matched:
+        docs = list(self.find(query))
+        for doc in docs:
             if "$set" in update:
                 doc.update(update["$set"])
+            if "$unset" in update:
+                for key in update["$unset"]:
+                    doc.pop(key, None)
             if "$inc" in update:
                 for key, value in update["$inc"].items():
                     doc[key] = doc.get(key, 0) + value
-            if "$push" in update:
-                for key, value in update["$push"].items():
-                    doc.setdefault(key, []).append(value)
-            if "$pull" in update:
-                for key, value in update["$pull"].items():
-                    if key in doc:
-                        doc[key] = [item for item in doc[key] if not all(
-                            item.get(k) == v for k, v in value.items()
-                        )]
-        result.matched_count = len(matched)
-        result.modified_count = len(matched)
+        result.matched_count = len(docs)
+        result.modified_count = len(docs)
         return result
 
     def find_one_and_update(self, query, update, upsert=False, return_document=None):
@@ -318,19 +322,48 @@ def mock_db(app):
 
 
 @pytest.fixture
-def admin_headers():
-    """Header Authorization com um JWT de administrador válido."""
+def auth_headers(mock_db):
+    """Factory de headers Authorization com um JWT válido.
+
+    As rotas protegidas (@admin_required / @owner_or_admin_required) exigem um
+    Bearer token; os testes de integração usam esta factory para autenticar.
+
+    A partir da Fase 3 os decorators sensíveis releem `tipo`/`ativo` do banco
+    (frescor de privilégio), então a factory também semeia — de forma idempotente
+    — um usuário ATIVO correspondente na coleção `users`. Sem isso, o portador do
+    token seria tratado como conta inexistente e as rotas responderiam 401.
+    """
     from app.services.jwt_service import create_access_token
-    token = create_access_token(user_id=999, user_type="Administrador", email="admin@teste.com")
-    return {"Authorization": f"Bearer {token}"}
+
+    def _make(user_id=1, tipo="Cliente", email="user@test.com"):
+        users = mock_db["users"]
+        if users.find_one({"id": user_id}) is None:
+            users.insert_one({
+                "id": user_id,
+                "nome": f"User {user_id}",
+                "email": email,
+                "tipo": tipo,
+                "ativo": True,
+                "email_confirmado": True,
+            })
+        token = create_access_token(user_id, tipo, email)
+        return {"Authorization": f"Bearer {token}"}
+
+    return _make
 
 
 @pytest.fixture
-def auth_headers():
-    """Header Authorization com um JWT de cliente válido (id=1)."""
-    from app.services.jwt_service import create_access_token
-    token = create_access_token(user_id=1, user_type="Cliente", email="teste@email.com")
-    return {"Authorization": f"Bearer {token}"}
+def admin_headers(auth_headers):
+    """Headers de um administrador — passa em @admin_required."""
+    return auth_headers(user_id=99, tipo="Administrador", email="admin@test.com")
+
+
+@pytest.fixture
+def user_headers(auth_headers):
+    """Headers de um cliente comum com id=1 — o dono dos recursos nos testes
+    (carrinho/pedidos/favoritos de user_id=1). Passa em @owner_or_admin_required
+    quando a URL referencia o usuário 1."""
+    return auth_headers(user_id=1, tipo="Cliente", email="user@test.com")
 
 
 @pytest.fixture

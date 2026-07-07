@@ -1,5 +1,7 @@
 from flask import request, jsonify, current_app
+from app.utils.db import require_db
 from pymongo.errors import DuplicateKeyError
+from bson import ObjectId
 from typing import Any, Dict
 
 from ..models.category_model import (
@@ -8,9 +10,7 @@ from ..models.category_model import (
     validate_category,
     normalize_category,
 )
-from ..utils.serialization import serialize_doc
-from ..utils.pagination import get_pagination_params
-from ..utils.decorators import require_db
+from ..utils.serialization import serialize_doc as _serialize
 from ..utils.responses import ok, err
 
 
@@ -27,11 +27,13 @@ def _invalidate_categories_cache():
 def list_categories():
     """Lista todas as categorias com filtros opcionais."""
     db = current_app.db
+
     coll = get_collection(db)
 
     # Filtro por status ativo
     active_only = request.args.get("active_only", "false").lower() == "true"
-    page, page_size = get_pagination_params(default_size=10)
+    page = max(int(request.args.get("page", 1) or 1), 1)
+    page_size = min(max(int(request.args.get("page_size", 10) or 10), 1), 100)
 
     query: Dict[str, Any] = {}
     if active_only:
@@ -41,17 +43,19 @@ def list_categories():
     total = coll.count_documents(query)
 
     items = [
-        serialize_doc(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
+        _serialize(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
     ]
 
-    return ok({
-        "items": items,
-        "pagination": {
-            "page": page,
-            "page_size": page_size,
-            "total": total,
-        },
-    })
+    return ok(
+        {
+            "items": items,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+            },
+        }
+    )
 
 
 @require_db
@@ -63,7 +67,7 @@ def get_category(id: int):
     doc = coll.find_one({"id": int(id)})
     if not doc:
         return err("category not found", 404)
-    return ok(serialize_doc(doc))
+    return ok(_serialize(doc))
 
 
 @require_db
@@ -88,7 +92,7 @@ def create_category():
     except DuplicateKeyError:
         return err("category id already exists", 409)
 
-    return ok(serialize_doc(doc), status=201)
+    return ok(_serialize(doc), status=201)
 
 
 @require_db
@@ -103,7 +107,8 @@ def update_category(id: int):
 
     payload = request.get_json(silent=True) or {}
     # Merge parcial
-    merged = serialize_doc(current)
+    merged = dict(current)
+    merged.pop("_id", None)
     merged.update(payload)
     merged = normalize_category(merged)
 
@@ -123,7 +128,7 @@ def update_category(id: int):
     coll.update_one({"id": int(id)}, {"$set": merged})
     _invalidate_categories_cache()  # Invalida cache após atualizar
     updated = coll.find_one({"id": int(id)})
-    return ok(serialize_doc(updated))
+    return ok(_serialize(updated))
 
 
 @require_db
@@ -163,6 +168,24 @@ def delete_category(id: int):
 
 
 @require_db
+def deactivate_category(id: int):
+    """Desativa uma categoria (soft delete)."""
+    db = current_app.db
+    coll = get_collection(db)
+
+    category = coll.find_one({"id": int(id)})
+    if not category:
+        return err("categoria não encontrada", 404)
+
+    if not category.get("active", True):
+        return err("categoria já está desativada")
+
+    coll.update_one({"id": int(id)}, {"$set": {"active": False}})
+    _invalidate_categories_cache()  # Invalida cache após desativar
+    return ok(message="categoria desativada com sucesso")
+
+
+@require_db
 def activate_category(id: int):
     """Reativa uma categoria inativa."""
     db = current_app.db
@@ -175,17 +198,15 @@ def activate_category(id: int):
     coll.update_one({"id": int(id)}, {"$set": {"active": True}})
     _invalidate_categories_cache()  # Invalida cache após ativar
     updated = coll.find_one({"id": int(id)})
-    return ok(serialize_doc(updated))
+    return ok(_serialize(updated))
+
 
 
 @require_db
 def get_categories_summary():
-    """Retorna resumo das categorias para uso em outros endpoints.
-
-    Exceção ao envelope: devolve uma **lista pura** de categorias ativas, formato
-    consumido diretamente pelos clientes (mobile tipa como ``Category[]``).
-    """
+    """Retorna resumo das categorias para uso em outros endpoints."""
     db = current_app.db
+
     coll = get_collection(db)
 
     # Busca apenas categorias ativas

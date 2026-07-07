@@ -1,21 +1,24 @@
-"""
-Parsing de paginação a partir da query string.
-
-Lê ``page``/``page_size`` de ``request.args`` aplicando clamp (page >= 1 e
-page_size dentro de ``[1, max_size]``). Antes o mesmo cálculo estava reescrito,
-com estilos divergentes, em vários controllers.
-"""
+"""Parsing de paginação com limites seguros para as views."""
 from typing import Tuple
+
 from flask import request
 
 
-def get_pagination_params(default_size: int = 20, max_size: int = 100) -> Tuple[int, int]:
-    """Retorna ``(page, page_size)`` já normalizados a partir de ``request.args``.
+def parse_pagination(default_page_size: int = 20, max_page_size: int = 100) -> Tuple[int, int, int]:
+    """Lê ``page``/``page_size`` da query string com clamp.
 
-    Levanta ``ValueError`` se os parâmetros não forem inteiros — o chamador
-    decide se responde 400 ou deixa o handler central tratar.
+    Retorna ``(page, page_size, skip)``. ``page`` é no mínimo 1; ``page_size``
+    fica limitado a ``[1, max_page_size]`` para evitar um ``.limit()`` ilimitado
+    (um ``page_size`` gigante varreria a coleção inteira — vetor de DoS). Valores
+    ausentes ou não numéricos caem no default.
     """
-    page = max(int(request.args.get("page", 1) or 1), 1)
-    page_size = int(request.args.get("page_size", default_size) or default_size)
-    page_size = min(max(page_size, 1), max_size)
-    return page, page_size
+    def _read_int(name: str, default: int) -> int:
+        try:
+            return int(request.args.get(name, default))
+        except (TypeError, ValueError):
+            return default
+
+    page = max(_read_int("page", 1), 1)
+    page_size = min(max(_read_int("page_size", default_page_size), 1), max_page_size)
+    skip = (page - 1) * page_size
+    return page, page_size, skip
