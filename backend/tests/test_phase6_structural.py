@@ -106,3 +106,16 @@ class TestListUsersHardening:
         # Termo com metacaracteres de ReDoS; escapado, é tratado como literal.
         resp = client.get("/api/users/?search=(a%2B)%2B%24", headers=admin_headers)
         assert resp.status_code == 200
+
+
+# --------------------------------------------------------------------------- #
+# #3 — require_db: guard de banco centralizado, com 503 canônico
+# --------------------------------------------------------------------------- #
+class TestRequireDb:
+    def test_banco_indisponivel_retorna_503_canonico(self, client, app, admin_headers, monkeypatch):
+        # admin_headers já semeou o admin; derrubar o banco depois força o 503
+        # pela camada require_db (a auth degrada para as claims sem banco).
+        monkeypatch.setattr(app, "db", None)
+        resp = client.get("/api/users/", headers=admin_headers)
+        assert resp.status_code == 503
+        assert resp.get_json()["message"] == "Banco de dados indisponível"

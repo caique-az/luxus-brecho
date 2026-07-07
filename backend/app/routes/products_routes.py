@@ -1,5 +1,6 @@
 from __future__ import annotations
 from flask import Blueprint, request, jsonify, current_app
+from app.utils.db import require_db
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 from typing import Any, Dict
@@ -28,6 +29,7 @@ from ..utils.serialization import serialize_doc as _serialize
 products_bp = Blueprint('products', __name__)
 
 @products_bp.route('/', methods=['GET'])
+@require_db
 def list_products():
     """List all products with optional filtering and pagination"""
     schema = ProductQuerySchema()
@@ -41,8 +43,6 @@ def list_products():
         }), 400
     
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     coll = get_collection(db)
 
@@ -80,11 +80,10 @@ def list_products():
     )
 
 @products_bp.route('/<int:id>', methods=['GET'])
+@require_db
 def get_product(id: int):
     """Get a single product by ID"""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
     
     coll = get_collection(db)
     doc = coll.find_one({"id": int(id)})
@@ -96,11 +95,10 @@ def get_product(id: int):
 
 @products_bp.route('/', methods=['POST'])
 @admin_required
+@require_db
 def create_product():
     """Create a new product - Admin only"""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
     
     coll = get_collection(db)
     payload = request.get_json(silent=True) or {}
@@ -118,11 +116,10 @@ def create_product():
 
 @products_bp.route('/<int:id>', methods=['PUT'])
 @admin_required
+@require_db
 def update_product(id: int):
     """Update an existing product - Admin only"""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
     
     coll = get_collection(db)
     current = coll.find_one({"id": int(id)})
@@ -152,11 +149,10 @@ def update_product(id: int):
 
 @products_bp.route('/<int:id>', methods=['DELETE'])
 @admin_required
+@require_db
 def delete_product(id: int):
     """Delete a product - Admin only"""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
     
     coll = get_collection(db)
     
@@ -181,6 +177,7 @@ def delete_product(id: int):
 
 @products_bp.route('/with-image', methods=['POST'])
 @admin_required
+@require_db
 def create_product_with_image():
     """
     Create product with image upload
@@ -191,8 +188,6 @@ def create_product_with_image():
     - image: image file
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
     
     try:
         # Detailed image validation
@@ -312,6 +307,7 @@ def create_product_with_image():
 
 @products_bp.route('/<int:id>/image', methods=['PUT'])
 @admin_required
+@require_db
 def update_product_image(id: int):
     """
     Update only the image of a product - Admin only
@@ -321,8 +317,6 @@ def update_product_image(id: int):
     - image: new image file
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
     
     coll = get_collection(db)
     
@@ -369,11 +363,10 @@ def update_product_image(id: int):
         return jsonify(message="Erro interno no servidor"), 500
 
 @products_bp.route('/category/<string:categoria>', methods=['GET'])
+@require_db
 def get_products_by_category(categoria: str):
     """Get products by specific category"""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     coll = get_collection(db)
     

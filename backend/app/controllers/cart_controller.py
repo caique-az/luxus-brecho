@@ -2,6 +2,7 @@
 Controller para gerenciamento de carrinhos de compras.
 """
 from flask import jsonify, request, current_app
+from app.utils.db import require_db
 from datetime import datetime
 from typing import Dict, Any
 from bson import ObjectId
@@ -13,11 +14,10 @@ from ..models.cart_model import (
 )
 
 
+@require_db
 def get_user_cart(user_id: int):
     """Obtém o carrinho do usuário."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         coll = get_collection(db)
@@ -73,11 +73,10 @@ def get_user_cart(user_id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def add_to_cart(user_id: int):
     """Adiciona item ao carrinho do usuário."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -138,11 +137,10 @@ def add_to_cart(user_id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def remove_from_cart(user_id: int):
     """Remove item do carrinho do usuário."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -178,11 +176,10 @@ def remove_from_cart(user_id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def clear_cart(user_id: int):
     """Limpa o carrinho do usuário."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         coll = get_collection(db)
@@ -205,11 +202,10 @@ def clear_cart(user_id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def sync_cart(user_id: int):
     """Sincroniza carrinho local com o servidor."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()

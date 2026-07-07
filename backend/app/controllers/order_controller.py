@@ -2,6 +2,7 @@
 Controller para gerenciamento de pedidos.
 """
 from flask import jsonify, request, current_app, g
+from app.utils.db import require_db
 from datetime import datetime
 from typing import Dict, Any
 
@@ -23,11 +24,10 @@ def _forbidden_if_not_owner(order):
     return None
 
 
+@require_db
 def get_user_orders(user_id: int):
     """Obtém todos os pedidos do usuário com paginação."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         # Parâmetros de paginação
@@ -60,11 +60,10 @@ def get_user_orders(user_id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def get_order_by_id(order_id: int):
     """Obtém um pedido específico pelo ID."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         coll = get_collection(db)
@@ -84,11 +83,10 @@ def get_order_by_id(order_id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def create_order(user_id: int):
     """Cria um novo pedido com transação para garantir consistência."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -223,11 +221,10 @@ def _create_order_without_transaction(coll, products_coll, cart_coll, order, pro
     )
 
 
+@require_db
 def update_order_status(order_id: int):
     """Atualiza o status de um pedido."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -260,11 +257,10 @@ def update_order_status(order_id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def cancel_order(order_id: int):
     """Cancela um pedido."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         coll = get_collection(db)
