@@ -8,7 +8,6 @@ from app.controllers.cart_controller import (
     get_user_cart,
     add_to_cart,
     remove_from_cart,
-    update_cart_item,
     clear_cart,
     sync_cart,
 )
@@ -37,13 +36,6 @@ def add_item(user_id):
 def remove_item(user_id):
     """Remove item do carrinho."""
     return remove_from_cart(user_id)
-
-
-@cart_bp.route("/<int:user_id>/update", methods=["PUT"])
-@owner_or_admin_required("user_id")
-def update_item(user_id):
-    """Atualiza quantidade de item no carrinho."""
-    return update_cart_item(user_id)
 
 
 @cart_bp.route("/<int:user_id>/clear", methods=["DELETE"])

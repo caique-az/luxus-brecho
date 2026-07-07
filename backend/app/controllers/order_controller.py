@@ -12,7 +12,7 @@ from ..models.order_model import (
     validate_order,
     ORDER_STATUS,
 )
-from ..models.cart_model import get_collection as get_cart_collection
+from ..models.cart_model import get_collection as get_cart_collection, coerce_product_id
 
 
 def _forbidden_if_not_owner(order):
@@ -102,29 +102,44 @@ def create_order(user_id: int):
         if not is_valid:
             return jsonify(message=error_msg), 400
 
-        # Busca informações dos produtos
+        # Resolve os produtos. Peça única: sem quantidade, cada preço conta uma vez.
+        # Qualquer product_id inválido (não-int → injeção NoSQL) ou inexistente/
+        # indisponível é rejeitado — nada de pular item e persistir total 0.
         products_coll = db["products"]
         items_with_details = []
         total = 0
         product_ids_to_update = []
-        
+        seen_ids = set()
+
         for item in payload.get("items", []):
-            product = products_coll.find_one({"id": item.get("product_id")})
-            if product:
-                if product.get("status") != "disponivel":
-                    return jsonify(message=f"Produto '{product.get('titulo')}' não está disponível"), 400
-                
-                item_total = (product.get("preco", 0)) * item.get("quantity", 1)
-                items_with_details.append({
-                    "product_id": item.get("product_id"),
-                    "quantity": item.get("quantity", 1),
-                    "preco_unitario": product.get("preco", 0),
-                    "preco_total": item_total,
-                    "titulo": product.get("titulo"),
-                    "imagem": product.get("imagem"),
-                })
-                total += item_total
-                product_ids_to_update.append(item.get("product_id"))
+            product_id = coerce_product_id(item.get("product_id"))
+            if product_id is None:
+                return jsonify(message="product_id inválido no pedido"), 400
+
+            # Peça única: ignora repetição do mesmo produto no mesmo pedido.
+            if product_id in seen_ids:
+                continue
+            seen_ids.add(product_id)
+
+            product = products_coll.find_one({"id": product_id})
+            if not product:
+                return jsonify(message=f"Produto {product_id} não encontrado"), 404
+
+            if product.get("status") != "disponivel":
+                return jsonify(message=f"Produto '{product.get('titulo')}' não está disponível"), 400
+
+            preco = product.get("preco", 0)
+            items_with_details.append({
+                "product_id": product_id,
+                "preco": preco,
+                "titulo": product.get("titulo"),
+                "imagem": product.get("imagem"),
+            })
+            total += preco
+            product_ids_to_update.append(product_id)
+
+        if not items_with_details:
+            return jsonify(message="Pedido deve ter pelo menos um item válido"), 400
 
         coll = get_collection(db)
         cart_coll = get_cart_collection(db)

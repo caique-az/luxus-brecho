@@ -145,21 +145,21 @@ Cada fase é um bloco entregável e testável isoladamente. Faça **uma fase por
   2. `total` = soma dos `preco` dos produtos.
   3. Remover `update_cart_item` e sua rota (`cart_routes.py:36-39`).
 - **Critério de aceite:** re-adicionar o mesmo produto não duplica; total do pedido = soma dos preços únicos.
-- [ ] Concluído
+- [x] Concluído — `quantity` removido do carrinho e do pedido; `add_to_cart` idempotente; `create_order` deduplica e soma `preco` (sem multiplicação); `update_cart_item` e a rota `/update` removidos.
 
 ### 5.2 — Rejeitar pedido com itens inválidos / total zero `[#12]`
 - **Arquivo:** `backend/app/controllers/order_controller.py:99-115`.
 - **Problema:** `if product:` pula silenciosamente `product_id` inexistente; se todos forem inválidos, cria pedido `confirmado` com `total=0` e retorna 201.
 - **Passos:** se qualquer `product_id` do payload não resolver → 400/404; rejeitar pedido com 0 itens válidos.
 - **Critério de aceite:** payload só com IDs inválidos → erro (não 201); nenhum pedido de total 0 é persistido.
-- [ ] Concluído
+- [x] Concluído — `create_order` retorna 404 para produto inexistente (sem pular silenciosamente) e 400 se sobrarem 0 itens válidos; nenhum pedido total 0 é criado.
 
 ### 5.3 — Bloquear injeção de operador NoSQL `[#13]`
 - **Arquivos:** `backend/app/controllers/cart_controller.py:88-96` (`add_to_cart`), e também `create_order`/`sync_cart` que usam `product_id` cru.
 - **Problema:** `if not product_id` só rejeita falsy; `{"$gt": 0}` é truthy e vai direto ao filtro do Mongo, casando produto arbitrário e sendo gravado como `product_id`.
 - **Passos:** validar que `product_id` é `int` antes de qualquer query (reusar `validate_cart_item`/`validate_favorite_payload`); rejeitar não-int com 400.
 - **Critério de aceite:** `product_id: {"$gt": 0}` → 400; só inteiros são aceitos.
-- [ ] Concluído
+- [x] Concluído — helper `coerce_product_id` em `cart_model`; `add_to_cart`/`create_order` rejeitam não-int com 400; `sync_cart` descarta inválidos. `{"$gt": 0}` não vira int.
 
 ---
 

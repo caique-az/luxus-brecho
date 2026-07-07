@@ -47,21 +47,37 @@ def normalize_cart(cart: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def normalize_cart_item(item: Dict[str, Any]) -> Dict[str, Any]:
-    """Normaliza item do carrinho."""
+    """Normaliza item do carrinho (peça única: sem quantidade)."""
     return {
         "product_id": item.get("product_id"),
-        "quantity": item.get("quantity", 1),
         "added_at": item.get("added_at", datetime.utcnow()).isoformat() if item.get("added_at") else None,
     }
 
 
+def coerce_product_id(value: Any) -> Optional[int]:
+    """Converte `product_id` para int de forma segura.
+
+    Retorna None quando o valor não é conversível — em especial um dict como
+    ``{"$gt": 0}`` (operador NoSQL): sendo truthy, ele passaria por checagens do
+    tipo ``if not product_id`` e iria direto ao filtro do Mongo, casando um
+    produto arbitrário e sendo gravado como product_id. Rejeitar o não-int aqui
+    barra essa injeção. `bool` é excluído de propósito (é subclasse de int).
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return int(value)
+    return None
+
+
 def validate_cart_item(item: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
-    """Valida item do carrinho."""
-    if not item.get("product_id"):
-        return False, "ID do produto é obrigatório"
-    
-    quantity = item.get("quantity", 1)
-    if not isinstance(quantity, int) or quantity < 1:
-        return False, "Quantidade deve ser um número inteiro positivo"
-    
+    """Valida item do carrinho (peça única: sem quantidade).
+
+    Exige um `product_id` inteiro válido (ver `coerce_product_id`).
+    """
+    if coerce_product_id(item.get("product_id")) is None:
+        return False, "product_id deve ser um inteiro válido"
+
     return True, None

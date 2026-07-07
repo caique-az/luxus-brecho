@@ -172,69 +172,41 @@ class TestCartRemove:
         assert response.status_code in [200, 404]
 
 
-class TestCartUpdate:
-    """Testes para atualizar quantidade no carrinho."""
-    
-    def test_update_cart_quantity(self, client, mock_db, sample_product, user_headers):
-        """Testa atualizar quantidade de item via add (incrementa)."""
+class TestCartSinglePiece:
+    """Testes da regra de peça única (sem quantidade; re-adicionar é idempotente)."""
+
+    def test_readd_e_idempotente(self, client, mock_db, sample_product, user_headers):
+        """Re-adicionar o mesmo produto não duplica nem cria quantidade."""
         mock_db["products"].insert_one(sample_product)
         mock_db["carts"].insert_one({
             "user_id": 1,
-            "items": [
-                {
-                    "product_id": sample_product["id"],
-                    "quantity": 1,
-                    "added_at": datetime.utcnow(),
-                }
-            ],
+            "items": [{"product_id": sample_product["id"], "added_at": datetime.utcnow()}],
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow(),
         })
-        
-        # Usa add para incrementar quantidade
-        add_data = {
-            "product_id": sample_product["id"],
-            "quantity": 1,
-        }
 
+        add_data = {"product_id": sample_product["id"]}
         response = client.post(
             "/api/cart/1/add",
             data=json.dumps(add_data),
             content_type="application/json",
-            headers=user_headers
+            headers=user_headers,
         )
 
-        assert response.status_code in [200, 201]
-    
-    def test_update_cart_invalid_quantity(self, client, mock_db, sample_product, user_headers):
-        """Testa atualizar com quantidade inválida."""
-        mock_db["products"].insert_one(sample_product)
-        mock_db["carts"].insert_one({
-            "user_id": 1,
-            "items": [
-                {
-                    "product_id": sample_product["id"],
-                    "quantity": 1,
-                    "added_at": datetime.utcnow(),
-                }
-            ],
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
-        })
-        
-        update_data = {
-            "product_id": sample_product["id"],
-            "quantity": 0,  # Quantidade inválida
-        }
+        assert response.status_code == 200  # idempotente: já estava no carrinho
+        cart = mock_db["carts"].find_one({"user_id": 1})
+        assert len(cart["items"]) == 1  # não duplicou
+        assert "quantity" not in cart["items"][0]  # sem quantidade
 
+    def test_update_route_nao_existe_mais(self, client, mock_db, user_headers):
+        """A rota de atualizar quantidade foi removida (peça única)."""
         response = client.put(
             "/api/cart/1/update",
-            data=json.dumps(update_data),
+            data=json.dumps({"product_id": 1, "quantity": 3}),
             content_type="application/json",
-            headers=user_headers
+            headers=user_headers,
         )
-
-        assert response.status_code == 400
+        assert response.status_code == 404
 
 
 class TestCartClear:
