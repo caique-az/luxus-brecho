@@ -174,10 +174,10 @@ def get_user_favorites(db, user_id: str) -> Tuple[bool, Optional[str], List[Dict
             {"user_id": user_id}
         ).sort("created_at", -1))  # Mais recentes primeiro
         
-        # Converter ObjectId para string
+        # Remove o _id interno do Mongo (não deve vazar na resposta da API)
         for fav in favorites:
-            fav['_id'] = str(fav['_id'])
-        
+            fav.pop('_id', None)
+
         return True, None, favorites
         
     except Exception as e:

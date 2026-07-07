@@ -7,8 +7,8 @@ Endpoints:
 - GET /favorites/check/<product_id> - Verifica se produto está favoritado
 """
 from flask import request, jsonify, current_app
+from app.utils.db import require_db
 from typing import Any, Dict
-from functools import wraps
 
 from ..models.favorite_model import (
     add_favorite,
@@ -19,45 +19,21 @@ from ..models.favorite_model import (
     ensure_indexes
 )
 from ..models.product_model import get_collection as get_products_collection
+from ..utils.serialization import serialize_doc as _serialize
 
 
-def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
-    """Serializa documento MongoDB removendo _id."""
-    if not doc:
-        return {}
-    d = dict(doc)
-    if '_id' in d:
-        d['_id'] = str(d['_id'])
-    return d
-
-
-def require_auth(f):
-    """Decorator para exigir autenticação."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Pegar user_id do header de autenticação
-        user_id = request.headers.get('X-User-Id')
-        
-        if not user_id:
-            return jsonify(message="Autenticação necessária"), 401
-        
-        return f(user_id, *args, **kwargs)
-    
-    return decorated_function
-
-
-def list_user_favorites(user_id: str):
+@require_db
+def list_user_favorites(user_id: int):
     """
     Lista todos os favoritos do usuário com detalhes dos produtos.
     
     GET /favorites
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     
     Response:
     {
         "favorites": [
             {
-                "_id": "...",
                 "user_id": "...",
                 "product_id": 1,
                 "created_at": "...",
@@ -68,8 +44,6 @@ def list_user_favorites(user_id: str):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Buscar favoritos
     success, error, favorites = get_user_favorites(db, user_id)
@@ -107,12 +81,13 @@ def list_user_favorites(user_id: str):
     ), 200
 
 
-def add_to_favorites(user_id: str):
+@require_db
+def add_to_favorites(user_id: int):
     """
     Adiciona um produto aos favoritos.
     
     POST /favorites
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     Body: { "product_id": 123 }
     
     Response:
@@ -122,8 +97,6 @@ def add_to_favorites(user_id: str):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Validar payload
     payload = request.get_json()
@@ -157,12 +130,13 @@ def add_to_favorites(user_id: str):
     ), 201
 
 
-def remove_from_favorites(user_id: str, product_id: int):
+@require_db
+def remove_from_favorites(user_id: int, product_id: int):
     """
     Remove um produto dos favoritos.
     
     DELETE /favorites/<product_id>
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     
     Response:
     {
@@ -170,8 +144,6 @@ def remove_from_favorites(user_id: str, product_id: int):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Remover favorito
     success, error = remove_favorite(db, user_id, product_id)
@@ -184,12 +156,13 @@ def remove_from_favorites(user_id: str, product_id: int):
     return jsonify(message="Produto removido dos favoritos"), 200
 
 
-def check_favorite(user_id: str, product_id: int):
+@require_db
+def check_favorite(user_id: int, product_id: int):
     """
     Verifica se um produto está nos favoritos.
     
     GET /favorites/check/<product_id>
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     
     Response:
     {
@@ -197,8 +170,6 @@ def check_favorite(user_id: str, product_id: int):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Verificar se está favoritado
     favorited = is_favorited(db, user_id, product_id)
@@ -206,12 +177,13 @@ def check_favorite(user_id: str, product_id: int):
     return jsonify(is_favorited=favorited), 200
 
 
-def toggle_favorite(user_id: str):
+@require_db
+def toggle_favorite(user_id: int):
     """
     Alterna o estado de favorito (adiciona se não existe, remove se existe).
     
     POST /favorites/toggle
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     Body: { "product_id": 123 }
     
     Response:
@@ -221,8 +193,6 @@ def toggle_favorite(user_id: str):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Validar payload
     payload = request.get_json()

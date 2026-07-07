@@ -1,7 +1,8 @@
 """
 Controller para gerenciamento de pedidos.
 """
-from flask import jsonify, request, current_app
+from flask import jsonify, request, current_app, g
+from app.utils.db import require_db
 from datetime import datetime
 from typing import Dict, Any
 
@@ -12,14 +13,21 @@ from ..models.order_model import (
     validate_order,
     ORDER_STATUS,
 )
-from ..models.cart_model import get_collection as get_cart_collection
+from ..models.cart_model import get_collection as get_cart_collection, coerce_product_id
 
 
+def _forbidden_if_not_owner(order):
+    """Retorna uma resposta 403 se o solicitante não for o dono do pedido nem
+    admin; caso contrário, None. Requer g.user_id/g.user_type (jwt_required)."""
+    if g.user_type != "Administrador" and order.get("user_id") != g.user_id:
+        return jsonify(message="Acesso negado. Você não tem permissão para este pedido"), 403
+    return None
+
+
+@require_db
 def get_user_orders(user_id: int):
     """Obtém todos os pedidos do usuário com paginação."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         # Parâmetros de paginação
@@ -52,19 +60,22 @@ def get_user_orders(user_id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def get_order_by_id(order_id: int):
     """Obtém um pedido específico pelo ID."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         coll = get_collection(db)
         order = coll.find_one({"id": order_id})
-        
+
         if not order:
             return jsonify(message="Pedido não encontrado"), 404
-        
+
+        denied = _forbidden_if_not_owner(order)
+        if denied:
+            return denied
+
         return jsonify(normalize_order(order))
 
     except Exception as e:
@@ -72,11 +83,10 @@ def get_order_by_id(order_id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def create_order(user_id: int):
     """Cria um novo pedido com transação para garantir consistência."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -90,29 +100,50 @@ def create_order(user_id: int):
         if not is_valid:
             return jsonify(message=error_msg), 400
 
-        # Busca informações dos produtos
+        # Resolve os produtos. Peça única: sem quantidade, cada preço conta uma vez.
+        # Qualquer product_id inválido (não-int → injeção NoSQL) ou inexistente/
+        # indisponível é rejeitado — nada de pular item e persistir total 0.
         products_coll = db["products"]
+
+        # Coage e deduplica os product_ids (peça única), preservando a ordem —
+        # um product_id não-int (injeção NoSQL) rejeita o pedido inteiro.
+        requested_ids = []
+        for item in payload.get("items", []):
+            product_id = coerce_product_id(item.get("product_id"))
+            if product_id is None:
+                return jsonify(message="product_id inválido no pedido"), 400
+            if product_id not in requested_ids:
+                requested_ids.append(product_id)
+
+        # Uma única query para todos os produtos do pedido (evita N+1).
+        products_by_id = {
+            p["id"]: p for p in products_coll.find({"id": {"$in": requested_ids}})
+        }
+
         items_with_details = []
         total = 0
         product_ids_to_update = []
-        
-        for item in payload.get("items", []):
-            product = products_coll.find_one({"id": item.get("product_id")})
-            if product:
-                if product.get("status") != "disponivel":
-                    return jsonify(message=f"Produto '{product.get('titulo')}' não está disponível"), 400
-                
-                item_total = (product.get("preco", 0)) * item.get("quantity", 1)
-                items_with_details.append({
-                    "product_id": item.get("product_id"),
-                    "quantity": item.get("quantity", 1),
-                    "preco_unitario": product.get("preco", 0),
-                    "preco_total": item_total,
-                    "titulo": product.get("titulo"),
-                    "imagem": product.get("imagem"),
-                })
-                total += item_total
-                product_ids_to_update.append(item.get("product_id"))
+
+        for product_id in requested_ids:
+            product = products_by_id.get(product_id)
+            if not product:
+                return jsonify(message=f"Produto {product_id} não encontrado"), 404
+
+            if product.get("status") != "disponivel":
+                return jsonify(message=f"Produto '{product.get('titulo')}' não está disponível"), 400
+
+            preco = product.get("preco", 0)
+            items_with_details.append({
+                "product_id": product_id,
+                "preco": preco,
+                "titulo": product.get("titulo"),
+                "imagem": product.get("imagem"),
+            })
+            total += preco
+            product_ids_to_update.append(product_id)
+
+        if not items_with_details:
+            return jsonify(message="Pedido deve ter pelo menos um item válido"), 400
 
         coll = get_collection(db)
         cart_coll = get_cart_collection(db)
@@ -140,13 +171,12 @@ def create_order(user_id: int):
                         # Insere pedido
                         coll.insert_one(order, session=session)
                         
-                        # Atualiza status dos produtos para vendido
-                        for product_id in product_ids_to_update:
-                            products_coll.update_one(
-                                {"id": product_id},
-                                {"$set": {"status": "vendido"}},
-                                session=session
-                            )
+                        # Atualiza status dos produtos para vendido (uma query)
+                        products_coll.update_many(
+                            {"id": {"$in": product_ids_to_update}},
+                            {"$set": {"status": "vendido"}},
+                            session=session
+                        )
                         
                         # Limpa o carrinho do usuário
                         cart_coll.update_one(
@@ -177,24 +207,23 @@ def create_order(user_id: int):
 def _create_order_without_transaction(coll, products_coll, cart_coll, order, product_ids, user_id, now):
     """Cria pedido sem transação (fallback)."""
     coll.insert_one(order)
-    
-    for product_id in product_ids:
-        products_coll.update_one(
-            {"id": product_id},
-            {"$set": {"status": "vendido"}}
-        )
-    
+
+    # Marca todos os produtos como vendidos numa única query (evita N updates)
+    products_coll.update_many(
+        {"id": {"$in": product_ids}},
+        {"$set": {"status": "vendido"}}
+    )
+
     cart_coll.update_one(
         {"user_id": user_id},
         {"$set": {"items": [], "updated_at": now}}
     )
 
 
+@require_db
 def update_order_status(order_id: int):
     """Atualiza o status de um pedido."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
@@ -227,11 +256,10 @@ def update_order_status(order_id: int):
         return jsonify(message="Erro interno do servidor"), 500
 
 
+@require_db
 def cancel_order(order_id: int):
     """Cancela um pedido."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         coll = get_collection(db)
@@ -242,6 +270,10 @@ def cancel_order(order_id: int):
         order = coll.find_one({"id": order_id})
         if not order:
             return jsonify(message="Pedido não encontrado"), 404
+
+        denied = _forbidden_if_not_owner(order)
+        if denied:
+            return denied
 
         if order.get("status") == "cancelado":
             return jsonify(message="Pedido já está cancelado"), 400
