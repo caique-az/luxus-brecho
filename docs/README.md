@@ -10,6 +10,7 @@ Documentação técnica do projeto. Comece pela [arquitetura](./arquitetura.md) 
 | [Referência da API](./api-reference.md) | Todos os endpoints REST: rotas, autenticação, parâmetros e exemplos de payload |
 | [Setup e Deploy](./setup-e-deploy.md) | Subir os 3 apps localmente, variáveis de ambiente, rede do mobile e publicação (Vercel/Expo) |
 | [Convenções](./convencoes.md) | Padrões de código, estrutura de pastas, autenticação, testes e fluxo de Git |
+| [Workflow de commits](./workflow-commits.md) | Rodar a suíte de testes antes de cada commit e padrão Conventional Commits |
 
 ## Mapa rápido do repositório
 
