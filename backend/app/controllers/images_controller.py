@@ -190,7 +190,10 @@ def upload_multiple_images():
 
         if successful_uploads:
             if errors:
-                response_data["errors"] = errors
+                # `errors` (dict) fica reservado a erros de validação; aqui é uma
+                # lista de falhas por arquivo, então usa a mesma chave do ramo de
+                # falha total (`upload_errors`).
+                response_data["upload_errors"] = errors
             return ok(response_data, status=201)
 
         return err(
