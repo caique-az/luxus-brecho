@@ -308,10 +308,12 @@ class AuthService {
    */
   async requestAccountDeletion(userId: number): Promise<{ success: boolean; error?: string }> {
     try {
+      const authHeaders = await this.getAuthHeaders();
       const response = await fetch(`${getApiUrl()}/users/request-deletion`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeaders,
         },
         body: JSON.stringify({ user_id: userId }),
       });
@@ -334,10 +336,12 @@ class AuthService {
    */
   async confirmAccountDeletion(userId: number, code: string): Promise<{ success: boolean; error?: string }> {
     try {
+      const authHeaders = await this.getAuthHeaders();
       const response = await fetch(`${getApiUrl()}/users/confirm-deletion`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeaders,
         },
         body: JSON.stringify({ user_id: userId, code }),
       });
