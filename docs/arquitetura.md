@@ -1,6 +1,9 @@
 # Arquitetura
 
-Este documento descreve **como o Luxus Brechó é organizado e como as partes conversam entre si**. O foco é dar a quem chega o modelo mental do sistema antes de entrar no código.
+> Fonte: `backend/app/` · `frontend/src/` · `mobile/` · scripts da raiz
+> Divergências conhecidas: [alinhamento-e-debitos.md](./alinhamento-e-debitos.md)
+
+Este documento descreve **como o Luxus Brechó é organizado e como as partes conversam entre si**. O foco é dar a quem chega o modelo mental do sistema antes de entrar no código. O detalhe interno de cada app está em [`docs/apps/`](./apps/backend.md); o contrato da API em [api-reference.md](./api-reference.md).
 
 ## Visão geral
 
@@ -13,6 +16,8 @@ O projeto é um **monorepo** com três aplicações que consomem a mesma API:
 | `mobile/` | Expo 49, React Native, TypeScript | App da loja para Android/iOS |
 
 A regra mais importante do projeto: **o backend é a única fonte de verdade**. Frontend e mobile são clientes independentes — não compartilham código entre si, apenas o contrato da API. Toda validação de negócio (preço, categorias válidas, permissões) acontece no backend; os clientes replicam validações apenas para UX.
+
+Os dois clientes **não estão no mesmo estágio de alinhamento** com o backend: o web acompanha o contrato atual (JWT, carrinho de peça única), com resíduos pontuais; o mobile ficou para trás (não implementa JWT e ainda modela `quantity`). O mapa completo está na [matriz de alinhamento](./alinhamento-e-debitos.md#matriz-de-alinhamento).
 
 ```mermaid
 graph TD
@@ -30,7 +35,7 @@ graph TD
     end
 
     FE -->|HTTP + JWT| API
-    MO -->|HTTP + JWT| API
+    MO -->|"HTTP (sem JWT — ver débitos)"| API
     API --> DB
     API --> ST
     API --> SMTP
@@ -42,20 +47,23 @@ As três aplicações evoluem juntas e dependem do mesmo contrato de API. Mantê
 
 - Alterar um endpoint e seus consumidores (web + mobile) no mesmo commit/PR.
 - Compartilhar a **configuração de rede** (`network-config.json`) entre backend e mobile sem publicar pacotes.
-- Ter scripts orquestradores na raiz (`npm run dev`, `dev:full`) que sobem o ambiente inteiro.
+- Ter scripts orquestradores na raiz que sobem o ambiente (ver [Scripts da raiz](#scripts-da-raiz)).
 
 Cada app, porém, tem seu próprio gerenciador de dependências e ciclo de deploy — não há build unificado nem workspace de pacotes.
 
 ## Backend — camadas
 
-O backend segue o padrão **app factory + blueprints**, com separação explícita em quatro camadas dentro de `backend/app/`:
+O backend segue o padrão **app factory + blueprints**, com separação em cinco camadas dentro de `backend/app/`:
 
 ```
 routes/        →  Definem URL + método HTTP e aplicam decorators de auth
 controllers/   →  Regras de negócio; leem request, validam, devolvem JSON
 models/        →  Acesso ao MongoDB + ensure_*() de coleções/índices
 services/      →  Capacidades transversais: JWT, email, storage
+utils/         →  Helpers canônicos: require_db, serialize_doc, parse_pagination, cache
 ```
+
+Exceções ao padrão: **produtos** e **health** têm a lógica inline no próprio arquivo de rota (não há `products_controller.py` — a duplicata antiga era código morto e foi removida).
 
 ```mermaid
 sequenceDiagram
@@ -66,30 +74,32 @@ sequenceDiagram
     participant DB as MongoDB
 
     C->>R: HTTP /api/products
-    R->>R: decorator de auth (ex.: @admin_required)
+    R->>R: decorators (@admin_required, @require_db)
     R->>Ctrl: chama função do controller
     Ctrl->>M: get_collection / validate / prepare
     M->>DB: find / insert / update
     DB-->>M: documento(s)
-    M-->>Ctrl: dados normalizados
-    Ctrl-->>C: JSON { success, ... }
+    M-->>Ctrl: dados normalizados (serialize_doc / normalize_*)
+    Ctrl-->>C: JSON (ver formatos em api-reference.md)
 ```
 
-### O `create_app()` é o coração
+### O `create_app()` e o ciclo de boot
 
 `backend/app/__init__.py` concentra toda a inicialização. Ao subir, ele:
 
-1. Configura **CORS** (origens vêm de `FRONTEND_ORIGIN`, ou um fallback embutido com localhost + domínios Vercel).
-2. Habilita, **se as libs estiverem instaladas**, compressão gzip (`flask-compress`) e rate limiting (`flask-limiter`). Ambas são opcionais — o app sobe sem elas.
-3. Conecta ao MongoDB e **chama `ensure_*()` de cada model** para garantir coleções e índices (inclusive índices únicos e de texto). Schema e índices são versionados em código, não criados manualmente no banco.
-4. Registra os blueprints a partir de uma **lista declarativa** (`blueprints_to_register`). Cada import é tolerante a falha: um blueprint quebrado loga um aviso, mas não derruba a aplicação.
-5. Define `app.url_map.strict_slashes = False` e handlers de erro globais (404/405/413/500) que sempre respondem JSON.
+1. Configura **CORS** (origens de `FRONTEND_ORIGIN` em CSV, ou fallback embutido com localhost + domínios Vercel). `Authorization` é header permitido; `X-User-Id` não é.
+2. Habilita, **se as libs estiverem instaladas**, compressão gzip (`flask-compress`) e rate limiting (`flask-limiter`, storage via `RATELIMIT_STORAGE_URI` — default `memory://` com warning para produção). Ambas são opcionais.
+3. Conecta ao MongoDB e **chama `ensure_*()` de cada model**: cria coleções, aplica validators JSON Schema (o de produtos é **dinâmico** — o enum de `categoria` vem das categorias ativas) e cria índices. Atenção: o `ensure_categories_collection` dropa e recria os índices da coleção a cada boot ([BE-07](./alinhamento-e-debitos.md#be-07)). Ao final, `ensure_users_collection` chama `create_default_admin`, que **semeia o primeiro admin a partir de `ADMIN_EMAIL`/`ADMIN_PASSWORD`** — sem essas env vars não há seed.
+4. Registra os blueprints a partir de uma lista declarativa (`blueprints_to_register`). Todos são **obrigatórios**: uma falha de import lança `RuntimeError` e aborta o startup (fail-fast — nada de API mutilada em silêncio).
+5. Define `app.url_map.strict_slashes = False` e handlers de erro globais (404/405/413/500) que respondem `{"success": false, "message": ...}`.
 
-> **Implicação prática:** `app.db` pode ser `None` quando `MONGODB_URI` não está definido — o servidor ainda inicia. Endpoints que dependem do banco devem checar isso e responder `503`.
+Além do boot da factory, o **import** de `services/jwt_service.py` já falha rápido se `JWT_SECRET_KEY` não estiver definida — o app não sobe sem ela.
+
+> **Implicação prática:** `app.db` pode ser `None` quando `MONGODB_URI` não está definido — o servidor ainda inicia. As rotas que tocam o banco usam o decorator `@require_db` (`utils/db.py`) e respondem `503` canônico nesse cenário.
 
 ## Modelo de dados (MongoDB)
 
-O banco usa **IDs inteiros sequenciais próprios** (campo `id`), gerados via coleção de contadores (`get_next_sequence` / `get_next_id`) — e não o `ObjectId` do Mongo, que é omitido nas respostas. Isso mantém URLs e payloads previsíveis (`/api/products/12`).
+O banco usa **IDs inteiros sequenciais próprios** (campo `id`), gerados via coleção de contadores (`counters`, com `$inc` atômico) — e não o `ObjectId` do Mongo, que é omitido nas respostas. Isso mantém URLs e payloads previsíveis (`/api/products/12`).
 
 ```mermaid
 erDiagram
@@ -136,39 +146,56 @@ erDiagram
         date updated_at
     }
     FAVORITES {
-        string user_id
+        int user_id
         int product_id
     }
     CARTS {
-        int user_id
+        int user_id UK
         array items
     }
 ```
 
+### Índices por coleção
+
+| Coleção | Índices (fonte: `models/*.py`) |
+|---------|-------------------------------|
+| `products` | `uniq_id` (único em `id`) · `idx_categoria` · `txt_titulo_descricao` (TEXT em `titulo`+`descricao`) |
+| `users` | únicos em `id` e `email` · `tipo` · `ativo` · TEXT em `nome` · **esparsos** em `token_confirmacao` e `reset_token` |
+| `categories` | `uniq_id` (único) · `uniq_name` (único parcial) · `idx_active` — recriados a cada boot |
+| `favorites` | `user_product_unique` (**único composto** `user_id`+`product_id`) · `user_created` · `product_idx` |
+| `carts` | `user_id_unique` (**único** — um carrinho por usuário) |
+| `orders` | `order_id_unique` (único em `id`) · `user_orders_by_date` (`user_id`+`created_at` desc) · `order_status` |
+| `counters` | `uniq_name` (único em `name`) |
+
 Pontos de modelagem que valem registrar:
 
-- **Produto é peça única.** Não há quantidade por item de carrinho: um produto está ou não no carrinho. O `status` (`disponivel`/`indisponivel`/`vendido`) controla a disponibilidade.
-- **Categorias são dinâmicas.** O `product_model` monta um schema de validação a partir das categorias **ativas** no banco (`create_dynamic_schema`), com cache. Criar uma categoria nova passa a permitir produtos nela sem mudar código.
+- **Produto é peça única.** Não há quantidade por item de carrinho ou pedido: um produto está ou não no carrinho, e o total do pedido é a soma dos preços. O `status` controla a disponibilidade.
+- **Categorias são dinâmicas.** O `product_model` monta o validator a partir das categorias **ativas** no banco (`create_dynamic_schema`), com cache TTL de 5 min (`utils/cache.py`). Criar uma categoria nova passa a permitir produtos nela sem mudar código.
 - **Endereço do pedido** é um subdocumento obrigatório com `rua`, `numero`, `bairro`, `cidade`, `estado`, `cep`.
-- Validação fica nos models: `validate_*`, `normalize_*` e `prepare_new_*` são o ponto único de regras de cada entidade.
+- Validação fica nos models: `validate_*`, `normalize_*` e `prepare_new_*` são o ponto único de regras de cada entidade. `coerce_product_id` (em `cart_model`) é a barreira anti-injeção de operador NoSQL.
 
 ## Autenticação e autorização
 
-Existem **dois mecanismos de identificação** no backend — é importante saber qual cada rota usa:
-
-| Mecanismo | Header | Onde é usado |
-|-----------|--------|--------------|
-| **JWT** (`Bearer`) | `Authorization: Bearer <token>` | Usuários (CRUD, troca de senha) e escrita de produtos (admin) |
-| **X-User-Id** | `X-User-Id: <id>` | Favoritos (decorator `require_auth` próprio do controller) |
+Há **um único mecanismo de identificação**: JWT via `Authorization: Bearer <access_token>`. O antigo header `X-User-Id` de favoritos foi removido do backend (clientes que ainda o enviam: ver [débitos](./alinhamento-e-debitos.md#matriz-de-alinhamento)).
 
 O serviço JWT (`services/jwt_service.py`) emite dois tokens:
 
-- **Access token** — expira em **24h**, carrega `user_id`, `tipo` e `email`.
-- **Refresh token** — expira em **30 dias**, usado em `/api/users/refresh-token` para renovar o access sem novo login.
+- **Access token** — expira em **24h**; claims `sub` (id), `type`, `email`.
+- **Refresh token** — expira em **30 dias**; usado em `POST /api/users/refresh-token` para renovar o par sem novo login.
 
-Decorators disponíveis: `@jwt_required`, `@jwt_optional`, `@admin_required` e `@owner_or_admin_required('id')` (permite o próprio usuário **ou** um admin). Algoritmo `HS256`, segredo em `JWT_SECRET_KEY`.
+Algoritmo **HS256 fixo no código** (a env `JWT_ALGORITHM` é ignorada — [BE-05](./alinhamento-e-debitos.md#be-05)); segredo em `JWT_SECRET_KEY` (obrigatória, fail-fast).
 
-> Cart e Orders identificam o usuário pelo `user_id` na própria URL e hoje não aplicam decorator de auth — um ponto a ter em mente ao endurecer a segurança.
+Decorators: `@jwt_required`, `@jwt_optional`, `@admin_required` e `@owner_or_admin_required('<param>')`. Todos com **frescor de privilégio**: releem `tipo`/`ativo` do banco a cada requisição — conta desativada ou admin rebaixado perdem acesso na requisição seguinte, sem esperar o token expirar. Detalhes e formatos de erro em [api-reference.md](./api-reference.md#autenticação).
+
+Cobertura por recurso (o detalhe rota a rota está em [`docs/api/`](./api-reference.md#índice-de-recursos)):
+
+| Recurso | Leitura | Escrita |
+|---------|---------|---------|
+| Produtos, categorias, imagens | pública | `@admin_required` |
+| Carrinho | posse (`@owner_or_admin_required`) | posse |
+| Pedidos | posse (na rota ou no controller) | posse; mudança de status só admin |
+| Favoritos | `@jwt_required` (identidade = token) | `@jwt_required` |
+| Usuários | dono ou admin | dono ou admin; exclusão de conta em 2 passos autenticados |
 
 ## Frontend — SPA por features
 
@@ -176,29 +203,33 @@ Decorators disponíveis: `@jwt_required`, `@jwt_optional`, `@admin_required` e `
 src/
 ├─ pages/<Pagina>/    →  index.jsx + index.css co-localizados (rota = pasta)
 ├─ components/        →  UI reutilizável (Header, Footer, Skeleton, Modais, Toast)
-├─ store/            →  Zustand: authStore, cartStore, favoritesStore
-├─ services/         →  axios + wrappers por domínio
-├─ schemas/          →  validação Zod
-└─ hooks/            →  useDebounce, useToast, ...
+├─ store/             →  Zustand: authStore, cartStore, favoritesStore
+├─ services/          →  axios + wrappers por domínio
+├─ schemas/           →  validação Zod
+└─ hooks/             →  useDebounce, useToast, ...
 ```
 
 Dois pontos estruturais:
 
-- **`services/api.js` é uma instância axios única com interceptors.** O interceptor de request injeta o `Bearer` token (exceto em rotas de auth); o de response faz **refresh automático em `401`**, usando uma fila (`failedQueue`) para não disparar múltiplos refresh concorrentes — requisições que falharam são repetidas após o token renovar. Os demais arquivos de `services/` são wrappers finos por domínio sobre essa instância.
-- **Stores Zustand orquestram efeitos cruzados.** Ex.: ao logar, o `authStore` dispara `useFavoritesStore.loadFavorites()`. A store é o lugar das ações assíncronas; as páginas consomem estado e disparam ações.
+- **`services/api.js` é uma instância axios única com interceptors.** O de request injeta o `Bearer` token (exceto em rotas de auth); o de response faz **refresh automático em `401`**, com fila (`failedQueue`) para não disparar múltiplos refresh concorrentes.
+- **Stores Zustand orquestram efeitos cruzados.** Ex.: ao logar, o `authStore` dispara `useFavoritesStore.loadFavorites()`.
+
+Detalhes (páginas, stores, testes e resíduos conhecidos) em [apps/frontend.md](./apps/frontend.md).
 
 ## Mobile — Expo Router + camada de rede
 
 ```
-app/                →  Rotas por arquivo (Expo Router). (tabs)/ = abas; [id].tsx = dinâmica
+app/                 →  Rotas por arquivo (Expo Router). (tabs)/ = abas; [id].tsx = dinâmica
 components/          →  ecommerce/, forms/, ui/
-constants/config.ts →  CONFIG central (tudo via env EXPO_PUBLIC_*)
-services/api.ts     →  ApiService com timeout, retry/backoff e cache (AsyncStorage)
-schemas/            →  Zod + hooks/useZodForm.ts
+constants/config.ts  →  CONFIG central (tudo via env EXPO_PUBLIC_*)
+services/api.ts      →  ApiService com timeout, retry/backoff e cache (AsyncStorage)
+schemas/             →  Zod + hooks/useZodForm.ts
 ```
 
-- **`constants/config.ts`** centraliza toda configuração e a torna ajustável por variáveis `EXPO_PUBLIC_*`. `getApiUrl()` decide a URL conforme o ambiente: produção usa `PRODUCTION_URL`; desenvolvimento usa a `NETWORK_URL` (o IP da máquina na rede local).
-- **`services/api.ts`** implementa retry com backoff e **cache local de respostas GET** via AsyncStorage, com tempos configuráveis por recurso (produtos, categorias).
+- **`constants/config.ts`** centraliza a configuração via `EXPO_PUBLIC_*`. A `getApiUrl()` efetivamente usada vem de `utils/networkUtils.ts` (produção → `PRODUCTION_URL`; dev → `NETWORK_URL`, o IP da máquina na rede local).
+- **`services/api.ts`** implementa retry com backoff e **cache local de respostas GET** via AsyncStorage.
+
+**Importante:** o mobile está atrás do contrato atual do backend — não implementa JWT, favoritos usam o header removido `X-User-Id`, e o carrinho ainda modela `quantity`. O estado real está em [apps/mobile.md](./apps/mobile.md) e na [matriz de alinhamento](./alinhamento-e-debitos.md#matriz-de-alinhamento).
 
 ## Configuração de rede entre dispositivos
 
@@ -214,15 +245,25 @@ graph LR
 
 `network-config.json` **não é versionado** (use `network-config.example.json` como referência). Ao trocar de rede, rode `npm run dev` de novo e reinicie o Metro com `--clear`. Detalhes operacionais em [setup-e-deploy.md](./setup-e-deploy.md).
 
+## Scripts da raiz
+
+O `package.json` da raiz é só orquestração (não tem dependências de app):
+
+| Script | O que faz |
+|--------|-----------|
+| `npm run dev` | `sync-network.js` — detecta o IP e gera/copia `network-config.json` |
+| `npm run dev:full` | `start-dev.js` — sobe **backend + mobile** (não o frontend web) |
+| `npm run backend` / `frontend` / `mobile` | sobe cada app individualmente |
+
 ## Serviços externos
 
 | Serviço | Uso | Configuração |
 |---------|-----|--------------|
 | **MongoDB (Atlas)** | Persistência principal | `MONGODB_URI`, `MONGODB_DATABASE` |
 | **Supabase Storage** | Hospedagem de imagens de produto | `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_BUCKET` |
-| **SMTP** | Emails transacionais (confirmação de conta, recuperação de senha, status de pedido) | bloco `SMTP_*`, `FROM_EMAIL`, `FROM_NAME` |
+| **SMTP** | Emails transacionais (confirmação de conta, recuperação de senha, código de exclusão, status de pedido) | bloco `SMTP_*`, `FROM_EMAIL`, `FROM_NAME` |
 
-O upload de imagem é coordenado pelo backend: o `products_controller`/rota `with-image` envia o arquivo ao Supabase, recebe a URL pública e grava apenas a URL no documento do produto. Ao excluir um produto, a imagem associada também é removida do storage.
+O upload de imagem é coordenado pelo backend: a rota `POST /api/products/with-image` envia o arquivo ao Supabase, recebe a URL (signed, 1 ano) e grava apenas a URL no documento do produto. Ao excluir um produto, a imagem associada também é removida do storage.
 
 ## Deploy
 
