@@ -1,6 +1,8 @@
 # Luxus Brechó — Backend
 
-API REST Flask + MongoDB com autenticação JWT e serviço de emails.
+API REST Flask + MongoDB com autenticação JWT, Supabase Storage (imagens) e SMTP (emails).
+
+> Documentação completa: [docs/api-reference.md](../docs/api-reference.md) (contrato da API, ~54 endpoints) · [docs/apps/backend.md](../docs/apps/backend.md) (estado interno) · [docs/setup-e-deploy.md](../docs/setup-e-deploy.md) (tabela de env vars). Este README é só o essencial para subir o serviço.
 
 ## 🚀 Início Rápido
 
@@ -12,65 +14,58 @@ python run.py         # http://localhost:5000/api
 
 ## ⚙️ Configuração (.env)
 
-```ini
-# Database
-MONGODB_URI=mongodb://localhost:27017
-MONGODB_DATABASE=luxus_brecho_db
+Use o `.env.example` como base. Dois pontos críticos:
 
-# JWT (IMPORTANTE: mude em produção!)
-JWT_SECRET_KEY=sua-chave-secreta-32-chars-minimo
-JWT_ALGORITHM=HS256
+- **`JWT_SECRET_KEY` é obrigatória** — sem ela o app **não sobe** (fail-fast no import). O algoritmo é HS256 fixo no código (`JWT_ALGORITHM` do env é ignorada).
+- **`ADMIN_EMAIL` / `ADMIN_PASSWORD` semeiam o primeiro admin** no boot — sem essas variáveis, **nenhum admin é criado** (não existe credencial padrão).
 
-# Flask
-FLASK_DEBUG=True
-FRONTEND_ORIGIN=http://localhost:5173
-
-# Email (opcional)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=seu_email@gmail.com
-SMTP_PASSWORD=sua_senha_de_app
-```
+Sem `MONGODB_URI` o servidor sobe mesmo assim; rotas que dependem do banco respondem `503`. A tabela completa de variáveis (com defaults e onde cada uma é lida) está em [docs/setup-e-deploy.md](../docs/setup-e-deploy.md#variáveis-de-ambiente-do-backend-backendenv).
 
 ## 📂 Estrutura
 
 ```
 app/
-├─ routes/       # Blueprints (products, users, orders...)
-├─ controllers/  # Lógica de negócio
-├─ services/     # JWT, Email, Supabase
-└─ __init__.py   # App factory
+├─ routes/       # Blueprints: URL + método + decorators de auth
+├─ controllers/  # Lógica de negócio (produtos e health são inline na rota)
+├─ models/       # Acesso ao Mongo + ensure_*() de coleções/índices
+├─ services/     # JWT, Email, Supabase Storage
+├─ utils/        # require_db, serialize_doc, parse_pagination, cache
+└─ __init__.py   # App factory (CORS, rate limit, Mongo, blueprints)
 ```
 
 ## 🔐 Autenticação JWT
 
-Rotas protegidas usam decorators:
-- `@jwt_required` - Requer token válido
-- `@admin_required` - Requer role admin
+`Authorization: Bearer <access_token>` — access de 24h, refresh de 30 dias (`POST /api/users/refresh-token`). Decorators disponíveis:
 
-Headers: `Authorization: Bearer <token>`
+- `@jwt_required` — token válido
+- `@jwt_optional` — token opcional
+- `@admin_required` — apenas administrador
+- `@owner_or_admin_required('<param>')` — dono do recurso ou admin
 
-## 📌 Principais Endpoints
+Todos releem `tipo`/`ativo` do banco a cada request (frescor de privilégio). Detalhes em [docs/api-reference.md](../docs/api-reference.md#autenticação).
+
+## 📌 Endpoints
+
+O inventário completo (8 blueprints, um doc por recurso) está em [docs/api-reference.md](../docs/api-reference.md#índice-de-recursos). Atalhos úteis:
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
 | GET | `/api/health` | Status da API |
 | POST | `/api/users/auth` | Login (retorna tokens) |
-| POST | `/api/users` | Registro |
+| POST | `/api/users` | Registro (sempre cria Cliente) |
 | GET | `/api/products` | Listar produtos |
-| POST | `/api/products` | Criar produto (admin) |
 
 ## 🧪 Testes
 
 ```bash
-pytest
-pytest -v  # Verbose
+pytest                # config em pytest.ini (-v --tb=short)
+pytest tests/test_products.py::test_nome   # um teste
 ```
+
+~185 testes contra um mock de Mongo em memória (`tests/conftest.py`) — validators e índices reais não são exercitados.
 
 ## 📦 Dependências Principais
 
-- **Flask** + **Flask-CORS**
-- **PyMongo** (MongoDB)
-- **PyJWT** (autenticação)
-- **python-dotenv** (configuração)
-- **pytest** (testes)
+- **Flask** + **Flask-CORS** (+ opcionais: flask-compress, flask-limiter)
+- **PyMongo** (MongoDB) · **PyJWT** (auth) · **bcrypt** (senhas)
+- **supabase** + **Pillow** (imagens) · **python-dotenv** · **pytest**

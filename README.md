@@ -37,14 +37,14 @@ npm run dev                   # gera network-config.json
 cd mobile && npx expo start --clear
 ```
 
-Para subir backend + frontend de uma vez, na raiz: `npm run dev:full`.
+Para subir backend + **mobile** de uma vez, na raiz: `npm run dev:full` (`start-dev.js` não inclui o frontend web — suba-o à parte com `npm run frontend`).
 
 ## Funcionalidades
 
-- **Autenticação JWT** com access + refresh token e confirmação de email
+- **Autenticação JWT** com access + refresh token e confirmação de email (backend + web; o mobile ainda não implementa JWT — ver [débitos](./docs/alinhamento-e-debitos.md))
 - **Catálogo** de produtos com filtros, busca textual e paginação
-- **Carrinho** de peças únicas (sem quantidade por item)
-- **Favoritos** sincronizados com o backend
+- **Carrinho** de peças únicas, sem quantidade por item (backend + web; o mobile ainda modela `quantity`)
+- **Favoritos** sincronizados com o backend (JWT)
 - **Pedidos** com endereço de entrega e notificação de status por email
 - **Painel admin** para gestão de produtos (role-based)
 
@@ -53,19 +53,21 @@ Para subir backend + frontend de uma vez, na raiz: `npm run dev:full`.
 | Documento | Conteúdo |
 |-----------|----------|
 | 🏛️ [Arquitetura](./docs/arquitetura.md) | Diagramas, camadas, modelo de dados, autenticação |
-| 📡 [Referência da API](./docs/api-reference.md) | Todos os endpoints REST |
-| ⚙️ [Setup e Deploy](./docs/setup-e-deploy.md) | Ambiente local, variáveis, rede mobile, deploy |
-| 📐 [Convenções](./docs/convencoes.md) | Padrões de código, testes e Git |
+| 📡 [Referência da API](./docs/api-reference.md) | Contrato geral + um doc por recurso em `docs/api/` |
+| ⚙️ [Setup e Deploy](./docs/setup-e-deploy.md) | Ambiente local, tabela de env vars, rede mobile, deploy |
+| 📐 [Convenções](./docs/convencoes.md) | Padrões de código, testes, Git e documentação |
+| 🩺 [Alinhamento e débitos](./docs/alinhamento-e-debitos.md) | Doc vivo: matriz Backend×Web×Mobile e débitos conhecidos |
 
-Cada subprojeto também tem seu próprio README (`backend/`, `frontend/`, `mobile/`) com detalhes específicos.
+O índice completo (incluindo os docs por app em `docs/apps/`) está em [docs/README.md](./docs/README.md).
 
 ## Testes
 
 ```bash
 cd backend && pytest
 cd frontend && npm test
-cd mobile && npm test
 ```
+
+O mobile tem `jest.config.js` configurado, mas ainda **não possui suítes de teste**.
 
 ## Licença
 

@@ -1,6 +1,8 @@
 # Luxus Brechó — Mobile
 
-App React Native + Expo com TypeScript e NativeWind.
+App React Native + **Expo 49** com TypeScript e NativeWind.
+
+> Documentação completa do estado do app (incluindo os gaps com o backend): [docs/apps/mobile.md](../docs/apps/mobile.md). Divergências conhecidas: [docs/alinhamento-e-debitos.md](../docs/alinhamento-e-debitos.md#débitos-do-mobile).
 
 ## 🚀 Início Rápido
 
@@ -17,7 +19,7 @@ EXPO_PUBLIC_API_URL=http://SEU_IP:5000/api
 EXPO_PUBLIC_ENABLE_LOGS=true
 ```
 
-> Execute `npm run dev` na raiz do projeto para sincronizar IP automaticamente.
+> Execute `npm run dev` na raiz do projeto para sincronizar o IP automaticamente (gera `mobile/network-config.json`, lido em dev).
 
 ## 📂 Estrutura
 
@@ -32,11 +34,11 @@ EXPO_PUBLIC_ENABLE_LOGS=true
 
 ## 🔑 Funcionalidades
 
-- **Catálogo** com filtros e busca
+- **Catálogo** com filtros e busca (cache local de GETs via AsyncStorage)
 - **Carrinho** com persistência local
-- **Autenticação** JWT
-- **Favoritos** sincronizados
 - **Painel Admin** (role-based)
+
+⚠️ **Estado real da autenticação:** o app **ainda não implementa JWT** — o login grava apenas uma flag no AsyncStorage. Por isso, os fluxos que exigem token no backend atual (favoritos, exclusão de conta, carrinho/pedidos no servidor) **não funcionam** contra a API. Detalhes: [docs/apps/mobile.md](../docs/apps/mobile.md#autenticação--estado-real).
 
 ## 📱 Executar
 
@@ -49,11 +51,8 @@ EXPO_PUBLIC_ENABLE_LOGS=true
 
 ## 🧪 Testes
 
-```bash
-npm test              # Jest
-npm run test:coverage # Cobertura
-```
+O Jest está configurado (`jest.config.js`), mas **ainda não há suítes de teste** — `npm test` não exercita nada.
 
 ## 📦 Stack
 
-**Expo 54** · **TypeScript** · **Expo Router** · **Zustand** · **Zod** · **NativeWind**
+**Expo 49** · **TypeScript** · **Expo Router** · **Zustand** · **Zod** · **NativeWind**
