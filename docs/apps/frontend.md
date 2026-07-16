@@ -5,7 +5,7 @@
 
 SPA da loja + painel admin. Stack: **React ^19.1**, **Vite ^6.3**, **react-router-dom ^7.6**, **Zustand ^4.5**, **Zod ^4.1**, **axios ^1.11**; testes com **Vitest ^3.2** e E2E com Robot Framework.
 
-Estado de alinhamento com o backend: **majoritariamente alinhado** (JWT com refresh, carrinho de peça única), com três resíduos conhecidos — [FE-01](../alinhamento-e-debitos.md#fe-01) (X-User-Id legado em favoritos), [FE-02](../alinhamento-e-debitos.md#fe-02) (exclusão de conta sem Authorization — quebrada) e [FE-03](../alinhamento-e-debitos.md#fe-03) (Checkout com `fetch` cru).
+Estado de alinhamento com o backend: **majoritariamente alinhado** (JWT com refresh, carrinho de peça única, exclusão de conta com Authorization), com dois resíduos conhecidos — [FE-01](../alinhamento-e-debitos.md#fe-01) (X-User-Id legado em favoritos) e [FE-03](../alinhamento-e-debitos.md#fe-03) (resíduo de `quantity` no payload do Checkout).
 
 ## Rotas e páginas
 
@@ -37,7 +37,7 @@ Wrappers por domínio: `products.js`, `categories.js`, `orders.js`, `favorites.j
 Pontos que fogem do padrão (registrados como débito):
 
 - `favorites.js` ainda monta o header `X-User-Id` manualmente em cada chamada — redundante, o Bearer vai junto ([FE-01](../alinhamento-e-debitos.md#fe-01)).
-- `auth.js:304-353` (exclusão de conta) e `pages/Checkout/index.jsx` usam `fetch` cru **sem Authorization** contra rotas que hoje exigem JWT ([FE-02](../alinhamento-e-debitos.md#fe-02), [FE-03](../alinhamento-e-debitos.md#fe-03)).
+- `pages/Checkout/index.jsx` já usa a instância axios (`api.get`/`api.post`, com Bearer), mas ainda monta `quantity: item.quantity || 1` no item do pedido — campo que o store não tem e o backend ignora ([FE-03](../alinhamento-e-debitos.md#fe-03)).
 
 ## Componentes e utilitários
 

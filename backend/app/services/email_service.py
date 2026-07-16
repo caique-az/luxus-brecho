@@ -118,6 +118,56 @@ def send_email(to_email: str, subject: str, html_content: str, text_content: Opt
         return False
 
 
+def _render_email(inner_html: str, accent: str = "#E91E63") -> str:
+    """Envolve o conteúdo do email no layout padrão (header LUXUS BRECHÓ + footer).
+
+    Centraliza o esqueleto HTML (header rosa + footer) que estava copiado em
+    todas as funções de email, com cores divergentes. ``accent`` define a cor
+    do header/rodapé para cada tipo de email.
+    """
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td align="center" style="padding: 40px 0;">
+                <table role="presentation" style="width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 40px 40px 20px 40px; text-align: center; background-color: {accent}; border-radius: 8px 8px 0 0;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: bold; letter-spacing: 2px;">LUXUS</h1>
+                            <p style="margin: 5px 0 0 0; color: #ffffff; font-size: 14px; letter-spacing: 4px;">BRECHÓ</p>
+                        </td>
+                    </tr>
+
+                    <!-- Conteúdo -->
+                    <tr>
+                        <td style="padding: 40px;">
+                            {inner_html}
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 30px 40px; background-color: #f8f9fa; border-radius: 0 0 8px 8px; text-align: center;">
+                            <p style="margin: 0; color: #999999; font-size: 12px;">
+                                Atenciosamente,<br>
+                                <strong>Equipe Luxus Brechó</strong>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
+
+
 def send_confirmation_email(to_email: str, nome: str, token: str, is_admin: bool = False) -> bool:
     """
     Envia email de confirmação de cadastro.
@@ -163,44 +213,20 @@ Equipe Luxus Brechó
     """
     
     # Conteúdo HTML
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="pt-BR">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Confirme seu email</title>
-    </head>
-    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-        <table role="presentation" style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td align="center" style="padding: 40px 0;">
-                    <table role="presentation" style="width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                        <!-- Header -->
-                        <tr>
-                            <td style="padding: 40px 40px 20px 40px; text-align: center; background-color: #E91E63; border-radius: 8px 8px 0 0;">
-                                <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: bold; letter-spacing: 2px;">LUXUS</h1>
-                                <p style="margin: 5px 0 0 0; color: #ffffff; font-size: 14px; letter-spacing: 4px;">BRECHÓ</p>
-                            </td>
-                        </tr>
-                        
-                        <!-- Conteúdo -->
-                        <tr>
-                            <td style="padding: 40px;">
-                                <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Olá {nome}!</h2>
-                                
+    inner = f"""<h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Olá {nome}!</h2>
+
                                 <p style="margin: 0 0 20px 0; color: #666666; font-size: 16px; line-height: 1.6;">
                                     {welcome_text}
                                 </p>
-                                
+
                                 <p style="margin: 0 0 20px 0; color: #666666; font-size: 16px; line-height: 1.6;">
                                     {role_text}
                                 </p>
-                                
+
                                 <p style="margin: 0 0 30px 0; color: #666666; font-size: 16px; line-height: 1.6;">
                                     Para ativar sua conta, por favor confirme seu email clicando no botão abaixo:
                                 </p>
-                                
+
                                 <!-- Botão -->
                                 <table role="presentation" style="width: 100%; border-collapse: collapse;">
                                     <tr>
@@ -211,42 +237,24 @@ Equipe Luxus Brechó
                                         </td>
                                     </tr>
                                 </table>
-                                
+
                                 <p style="margin: 0 0 10px 0; color: #999999; font-size: 14px; line-height: 1.6;">
                                     Ou copie e cole o link abaixo no seu navegador:
                                 </p>
-                                
+
                                 <p style="margin: 0 0 30px 0; color: #E91E63; font-size: 12px; line-height: 1.6; word-break: break-all;">
                                     {confirmation_url}
                                 </p>
-                                
+
                                 <p style="margin: 0 0 10px 0; color: #999999; font-size: 14px; line-height: 1.6;">
                                     ⏰ Este link é válido por <strong>24 horas</strong>.
                                 </p>
-                                
+
                                 <p style="margin: 0; color: #999999; font-size: 14px; line-height: 1.6;">
                                     Se você não criou esta conta, ignore este email.
-                                </p>
-                            </td>
-                        </tr>
-                        
-                        <!-- Footer -->
-                        <tr>
-                            <td style="padding: 30px 40px; background-color: #f8f9fa; border-radius: 0 0 8px 8px; text-align: center;">
-                                <p style="margin: 0; color: #999999; font-size: 12px;">
-                                    Atenciosamente,<br>
-                                    <strong>Equipe Luxus Brechó</strong>
-                                </p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    </body>
-    </html>
-    """
-    
+                                </p>"""
+    html_content = _render_email(inner)
+
     return send_email(to_email, subject, html_content, text_content)
 
 
@@ -274,59 +282,17 @@ Atenciosamente,
 Equipe Luxus Brechó
     """
     
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="pt-BR">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Bem-vindo!</title>
-    </head>
-    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-        <table role="presentation" style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td align="center" style="padding: 40px 0;">
-                    <table role="presentation" style="width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                        <!-- Header -->
-                        <tr>
-                            <td style="padding: 40px 40px 20px 40px; text-align: center; background-color: #E91E63; border-radius: 8px 8px 0 0;">
-                                <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: bold; letter-spacing: 2px;">LUXUS</h1>
-                                <p style="margin: 5px 0 0 0; color: #ffffff; font-size: 14px; letter-spacing: 4px;">BRECHÓ</p>
-                            </td>
-                        </tr>
-                        
-                        <!-- Conteúdo -->
-                        <tr>
-                            <td style="padding: 40px;">
-                                <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">🎉 Bem-vindo(a), {nome}!</h2>
-                                
+    inner = f"""<h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">🎉 Bem-vindo(a), {nome}!</h2>
+
                                 <p style="margin: 0 0 20px 0; color: #666666; font-size: 16px; line-height: 1.6;">
                                     Sua conta foi <strong>ativada com sucesso</strong>!
                                 </p>
-                                
+
                                 <p style="margin: 0; color: #666666; font-size: 16px; line-height: 1.6;">
                                     Agora você pode aproveitar todas as funcionalidades do <strong>Luxus Brechó</strong>.
-                                </p>
-                            </td>
-                        </tr>
-                        
-                        <!-- Footer -->
-                        <tr>
-                            <td style="padding: 30px 40px; background-color: #f8f9fa; border-radius: 0 0 8px 8px; text-align: center;">
-                                <p style="margin: 0; color: #999999; font-size: 12px;">
-                                    Atenciosamente,<br>
-                                    <strong>Equipe Luxus Brechó</strong>
-                                </p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    </body>
-    </html>
-    """
-    
+                                </p>"""
+    html_content = _render_email(inner)
+
     return send_email(to_email, subject, html_content, text_content)
 
 
@@ -363,25 +329,7 @@ Atenciosamente,
 Equipe Luxus Brechó
     """
     
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-    </head>
-    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-        <table role="presentation" style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td align="center" style="padding: 40px 0;">
-                    <table role="presentation" style="width: 600px; background-color: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                        <tr>
-                            <td style="padding: 40px 30px; text-align: center; background: linear-gradient(135deg, #E91E63 0%, #c2185b 100%);">
-                                <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: bold;">LUXUS BRECHÓ</h1>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 40px 30px;">
-                                <h2 style="margin: 0 0 20px 0; color: #333333;">Recuperação de Senha</h2>
+    inner = f"""<h2 style="margin: 0 0 20px 0; color: #333333;">Recuperação de Senha</h2>
                                 <p style="margin: 0 0 20px 0; color: #666666;">Olá <strong>{nome}</strong>!</p>
                                 <p style="margin: 0 0 30px 0; color: #666666;">Para redefinir sua senha, clique no botão abaixo:</p>
                                 <table role="presentation" style="margin: 0 auto;">
@@ -391,17 +339,9 @@ Equipe Luxus Brechó
                                         </td>
                                     </tr>
                                 </table>
-                                <p style="margin: 30px 0 0 0; color: #999999; font-size: 14px;">Este link é válido por 1 hora.</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    </body>
-    </html>
-    """
-    
+                                <p style="margin: 30px 0 0 0; color: #999999; font-size: 14px;">Este link é válido por 1 hora.</p>"""
+    html_content = _render_email(inner)
+
     return send_email(to_email, subject, html_content, text_content)
 
 
@@ -434,28 +374,7 @@ Atenciosamente,
 Equipe Luxus Brechó
     """
     
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="pt-BR">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Código de Exclusão</title>
-    </head>
-    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-        <table role="presentation" style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td align="center" style="padding: 40px 0;">
-                    <table role="presentation" style="width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                        <tr>
-                            <td style="padding: 40px 40px 20px 40px; text-align: center; background-color: #EF4444; border-radius: 8px 8px 0 0;">
-                                <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: bold; letter-spacing: 2px;">LUXUS</h1>
-                                <p style="margin: 5px 0 0 0; color: #ffffff; font-size: 14px; letter-spacing: 4px;">BRECHÓ</p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 40px;">
-                                <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">⚠️ Exclusão de Conta</h2>
+    inner = f"""<h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">⚠️ Exclusão de Conta</h2>
                                 <p style="margin: 0 0 20px 0; color: #666666; font-size: 16px; line-height: 1.6;">
                                     Olá <strong>{nome}</strong>!
                                 </p>
@@ -479,25 +398,9 @@ Equipe Luxus Brechó
                                 </p>
                                 <p style="margin: 0 0 10px 0; color: #999999; font-size: 14px; line-height: 1.6;">
                                     Se você não solicitou a exclusão da sua conta, ignore este email e sua conta permanecerá segura.
-                                </p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 30px 40px; background-color: #f8f9fa; border-radius: 0 0 8px 8px; text-align: center;">
-                                <p style="margin: 0; color: #999999; font-size: 12px;">
-                                    Atenciosamente,<br>
-                                    <strong>Equipe Luxus Brechó</strong>
-                                </p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    </body>
-    </html>
-    """
-    
+                                </p>"""
+    html_content = _render_email(inner, accent="#EF4444")
+
     return send_email(to_email, subject, html_content, text_content)
 
 
@@ -528,7 +431,7 @@ def send_order_status_notification(to_email: str, nome: str, order_id: int, stat
     
     text_content = f"{config['title']} - Pedido #{order_id}\n\nOlá {nome}!\n\n{config['message']}\n\nNúmero do pedido: #{order_id}\nStatus atual: {status.upper()}\n\nAtenciosamente,\nEquipe Luxus Brechó"
     
-    app_url = get_app_url()
-    html_content = f'''<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f4f4f4;"><table style="width:100%;"><tr><td align="center" style="padding:40px 0;"><table style="width:600px;background:#fff;border-radius:8px;box-shadow:0 4px 6px rgba(0,0,0,0.1);"><tr><td style="padding:40px;text-align:center;background:{config['color']};border-radius:8px 8px 0 0;"><h1 style="margin:0;color:#fff;font-size:32px;">LUXUS</h1><p style="margin:5px 0 0;color:#fff;font-size:14px;letter-spacing:4px;">BRECHÓ</p></td></tr><tr><td style="padding:40px;"><div style="text-align:center;margin-bottom:30px;"><span style="font-size:48px;">{config['icon']}</span></div><h2 style="margin:0 0 20px;color:#333;font-size:24px;text-align:center;">{config['title']}</h2><p style="margin:0 0 20px;color:#666;font-size:16px;">Olá <strong>{nome}</strong>!</p><p style="margin:0 0 20px;color:#666;font-size:16px;">{config['message']}</p><table style="width:100%;margin:20px 0;"><tr><td style="padding:15px;background:#f8f9fa;border-radius:8px;"><p style="margin:0;color:#666;font-size:14px;"><strong>Pedido:</strong> #{order_id}<br><strong>Status:</strong> <span style="color:{config['color']};font-weight:bold;">{status.upper()}</span></p></td></tr></table><table style="width:100%;"><tr><td align="center" style="padding:20px 0;"><a href="{app_url}/pedidos" style="display:inline-block;padding:15px 30px;background:{config['color']};color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">Ver Meus Pedidos</a></td></tr></table></td></tr><tr><td style="padding:30px 40px;background:#f8f9fa;border-radius:0 0 8px 8px;text-align:center;"><p style="margin:0;color:#999;font-size:12px;">Atenciosamente,<br><strong>Equipe Luxus Brechó</strong></p></td></tr></table></td></tr></table></body></html>'''
-    
+    inner = f'''<div style="text-align:center;margin-bottom:30px;"><span style="font-size:48px;">{config['icon']}</span></div><h2 style="margin:0 0 20px;color:#333;font-size:24px;text-align:center;">{config['title']}</h2><p style="margin:0 0 20px;color:#666;font-size:16px;">Olá <strong>{nome}</strong>!</p><p style="margin:0 0 20px;color:#666;font-size:16px;">{config['message']}</p><table style="width:100%;margin:20px 0;"><tr><td style="padding:15px;background:#f8f9fa;border-radius:8px;"><p style="margin:0;color:#666;font-size:14px;"><strong>Pedido:</strong> #{order_id}<br><strong>Status:</strong> <span style="color:{config['color']};font-weight:bold;">{status.upper()}</span></p></td></tr></table><table style="width:100%;"><tr><td align="center" style="padding:20px 0;"><a href="{APP_URL}/pedidos" style="display:inline-block;padding:15px 30px;background:{config['color']};color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">Ver Meus Pedidos</a></td></tr></table>'''
+    html_content = _render_email(inner, accent=config['color'])
+
     return send_email(to_email, subject, html_content, text_content)

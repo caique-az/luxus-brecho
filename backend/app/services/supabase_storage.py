@@ -374,13 +374,7 @@ class SupabaseStorageService:
         except Exception as e:
             return {"error": str(e)}
 
-# Instância global do serviço
-# Inicializada de forma segura - não falha se Supabase estiver indisponível
-try:
-    storage_service = SupabaseStorageService()
-except Exception as e:
-    print(f"Erro crítico ao inicializar SupabaseStorageService: {e}")
-    # Cria instância com estado de erro para evitar falhas na aplicação
-    storage_service = SupabaseStorageService()
-    storage_service.is_connected = False
-    storage_service.connection_error = f"Falha na inicialização: {str(e)}"
+# Instância global do serviço.
+# __init__ trata os próprios erros de conexão internamente (via
+# _initialize_connection), então a construção nunca lança por indisponibilidade.
+storage_service = SupabaseStorageService()

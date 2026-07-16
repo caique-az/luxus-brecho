@@ -1,7 +1,7 @@
 """
 Controller para gerenciamento de carrinhos de compras.
 """
-from flask import jsonify, request, current_app
+from flask import request, current_app
 from app.utils.db import require_db
 from datetime import datetime
 from typing import Dict, Any
@@ -12,6 +12,7 @@ from ..models.cart_model import (
     normalize_cart,
     coerce_product_id,
 )
+from ..utils.responses import ok, err
 
 
 @require_db
@@ -25,7 +26,7 @@ def get_user_cart(user_id: int):
         
         if not cart:
             # Retorna carrinho vazio se não existir
-            return jsonify({
+            return ok({
                 "user_id": user_id,
                 "items": [],
                 "created_at": None,
@@ -60,7 +61,7 @@ def get_user_cart(user_id: int):
                     }
                 })
         
-        return jsonify({
+        return ok({
             "id": str(cart.get("_id", "")),
             "user_id": user_id,
             "items": items_with_details,
@@ -70,7 +71,7 @@ def get_user_cart(user_id: int):
 
     except Exception as e:
         current_app.logger.error(f"Erro ao obter carrinho: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)
 
 
 @require_db
@@ -81,22 +82,22 @@ def add_to_cart(user_id: int):
     try:
         payload = request.get_json()
         if not payload:
-            return jsonify(message="Payload JSON é obrigatório"), 400
+            return err("Payload JSON é obrigatório")
 
         # product_id precisa ser inteiro válido (barra injeção de operador NoSQL)
         product_id = coerce_product_id(payload.get("product_id"))
         if product_id is None:
-            return jsonify(message="product_id deve ser um inteiro válido"), 400
+            return err("product_id deve ser um inteiro válido")
 
         # Verifica se o produto existe e está disponível
         products_coll = db["products"]
         product = products_coll.find_one({"id": product_id})
 
         if not product:
-            return jsonify(message="Produto não encontrado"), 404
+            return err("Produto não encontrado", 404)
 
         if product.get("status") != "disponivel":
-            return jsonify(message="Produto não está disponível"), 400
+            return err("Produto não está disponível")
 
         coll = get_collection(db)
         now = datetime.utcnow()
@@ -107,10 +108,7 @@ def add_to_cart(user_id: int):
         if cart:
             # Peça única: se o produto já está no carrinho, re-adicionar é idempotente.
             if any(item.get("product_id") == product_id for item in cart.get("items", [])):
-                return jsonify({
-                    "message": "Produto já está no carrinho",
-                    "product_id": product_id,
-                }), 200
+                return ok(message="Produto já está no carrinho", product_id=product_id)
             coll.update_one(
                 {"user_id": user_id},
                 {
@@ -127,14 +125,11 @@ def add_to_cart(user_id: int):
                 "updated_at": now,
             })
 
-        return jsonify({
-            "message": "Produto adicionado ao carrinho",
-            "product_id": product_id,
-        }), 201
+        return ok(message="Produto adicionado ao carrinho", status=201, product_id=product_id)
 
     except Exception as e:
         current_app.logger.error(f"Erro ao adicionar ao carrinho: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)
 
 
 @require_db
@@ -145,12 +140,12 @@ def remove_from_cart(user_id: int):
     try:
         payload = request.get_json()
         if not payload:
-            return jsonify(message="Payload JSON é obrigatório"), 400
+            return err("Payload JSON é obrigatório")
 
         product_id = payload.get("product_id")
 
         if not product_id:
-            return jsonify(message="ID do produto é obrigatório"), 400
+            return err("ID do produto é obrigatório")
 
         coll = get_collection(db)
         now = datetime.utcnow()
@@ -164,16 +159,13 @@ def remove_from_cart(user_id: int):
         )
 
         if result.modified_count == 0:
-            return jsonify(message="Produto não encontrado no carrinho"), 404
+            return err("Produto não encontrado no carrinho", 404)
 
-        return jsonify({
-            "message": "Produto removido do carrinho",
-            "product_id": product_id,
-        })
+        return ok(message="Produto removido do carrinho", product_id=product_id)
 
     except Exception as e:
         current_app.logger.error(f"Erro ao remover do carrinho: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)
 
 
 @require_db
@@ -195,11 +187,11 @@ def clear_cart(user_id: int):
             }
         )
 
-        return jsonify({"message": "Carrinho limpo com sucesso"})
+        return ok(message="Carrinho limpo com sucesso")
 
     except Exception as e:
         current_app.logger.error(f"Erro ao limpar carrinho: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)
 
 
 @require_db
@@ -210,7 +202,7 @@ def sync_cart(user_id: int):
     try:
         payload = request.get_json()
         if not payload:
-            return jsonify(message="Payload JSON é obrigatório"), 400
+            return err("Payload JSON é obrigatório")
 
         items = payload.get("items", [])
 
@@ -255,11 +247,8 @@ def sync_cart(user_id: int):
             upsert=True
         )
 
-        return jsonify({
-            "message": "Carrinho sincronizado",
-            "items_count": len(valid_items),
-        })
+        return ok(message="Carrinho sincronizado", items_count=len(valid_items))
 
     except Exception as e:
         current_app.logger.error(f"Erro ao sincronizar carrinho: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)

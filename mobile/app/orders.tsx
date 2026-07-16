@@ -15,6 +15,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { getApiUrl } from '../utils/networkUtils';
+import { authService } from '../services/auth';
 import { useToast } from '../contexts/ToastContext';
 import ConfirmModal from '../components/ui/ConfirmModal';
 
@@ -60,9 +61,11 @@ export default function OrdersScreen() {
     if (!user) return;
 
     try {
-      const response = await fetch(`${getApiUrl()}/cart/${user.id}`);
+      const response = await fetch(`${getApiUrl()}/cart/${user.id}`, {
+        headers: await authService.getAuthHeaders(),
+      });
       const data = await response.json();
-      
+
       if (response.ok) {
         setCart(data);
       }
@@ -97,7 +100,7 @@ export default function OrdersScreen() {
     try {
       const response = await fetch(`${getApiUrl()}/cart/${user.id}/remove`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authService.getAuthHeaders()) },
         body: JSON.stringify({ product_id: productId }),
       });
 
@@ -120,7 +123,7 @@ export default function OrdersScreen() {
     try {
       const response = await fetch(`${getApiUrl()}/cart/${user.id}/update`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authService.getAuthHeaders()) },
         body: JSON.stringify({ product_id: productId, quantity: newQuantity }),
       });
 
@@ -141,6 +144,7 @@ export default function OrdersScreen() {
     try {
       const response = await fetch(`${getApiUrl()}/cart/${user.id}/clear`, {
         method: 'DELETE',
+        headers: await authService.getAuthHeaders(),
       });
 
       if (response.ok) {

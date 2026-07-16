@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import api from '../../services/api';
 import { 
   FiArrowLeft, 
   FiPackage, 
@@ -13,8 +14,6 @@ import {
   FiLogIn
 } from 'react-icons/fi';
 import './index.css';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const STATUS_CONFIG = {
   pendente: { label: 'Pendente', color: '#F59E0B', icon: FiClock, bg: '#FEF3C7' },
@@ -47,12 +46,8 @@ const Pedidos = () => {
     if (!user) return;
 
     try {
-      const response = await fetch(`${API_URL}/orders/user/${user.id}`);
-      const data = await response.json();
-      
-      if (response.ok) {
-        setOrders(data.orders || []);
-      }
+      const { data } = await api.get(`/orders/user/${user.id}`);
+      setOrders(data.orders || []);
     } catch (error) {
       console.error('Erro ao buscar pedidos:', error);
     } finally {

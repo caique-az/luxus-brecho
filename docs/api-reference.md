@@ -15,47 +15,44 @@ Este documento cobre o que vale para a API inteira (autenticação, formatos de 
 
 ## Autenticação
 
-JWT assinado com **HS256** — o algoritmo é fixo no código (`jwt_service.py`); a env var `JWT_ALGORITHM` é ignorada ([BE-05](./alinhamento-e-debitos.md#be-05)). `JWT_SECRET_KEY` é obrigatória: o serviço lança `RuntimeError` no import se ela não existir (o app não sobe).
+Autenticação é **sempre via JWT** (`Authorization: Bearer <access_token>`) — usuários, escrita de produtos e categorias (admin), e também carrinho, pedidos e favoritos. JWT assinado com **HS256** — o algoritmo é fixo no código (`jwt_service.py`); a env var `JWT_ALGORITHM` é ignorada ([BE-05](./alinhamento-e-debitos.md#be-05)). `JWT_SECRET_KEY` é obrigatória: o serviço lança `RuntimeError` no import se ela não existir (o app não sobe).
 
 - **Access token**: expira em **24h**; claims `sub` (id do usuário, como string), `type` (`Cliente`/`Administrador`), `email`, `iat`, `exp`, `token_type: "access"`.
 - **Refresh token**: expira em **30 dias**; claims `sub`, `iat`, `exp`, `token_type: "refresh"`.
 - Envio: header `Authorization: Bearer <access_token>`.
-- O `sub` é gravado como string mas **normalizado para int** em toda leitura (`get_user_id_from_payload`) — o banco guarda `id` como int.
+- O `sub` é gravado como string mas **normalizado para int** em toda leitura (`get_user_id_from_payload`) — o banco guarda `id` como int, e a identidade vem sempre do token (`g.user_id`), nunca da URL.
 
 ### Decorators de auth
 
 | Decorator | Regra | Em caso de negação |
 |-----------|-------|--------------------|
-| `@jwt_required` | Exige access token válido; popula `g.user_id`/`g.user_type`/`g.user_email` | 401 `{"error": ...}` |
+| `@jwt_required` | Exige access token válido; popula `g.user_id`/`g.user_type`/`g.user_email` | 401 `{"success": false, "message": ...}` |
 | `@jwt_optional` | Popula `g.*` se houver token válido; senão segue com `g.user_id = None` | nunca nega |
-| `@admin_required` | Exige access token com `type: "Administrador"` **e** confirma no banco que ainda é admin ativo | 401/403 `{"error": ...}` |
-| `@owner_or_admin_required('<param>')` | Exige que `g.user_id` == parâmetro de URL indicado, ou que o usuário seja admin | 401/403 `{"error": ...}` |
+| `@admin_required` | Exige access token com `type: "Administrador"` **e** confirma no banco que ainda é admin ativo | 401/403 `{"success": false, "message": ...}` |
+| `@owner_or_admin_required('<param>')` | Exige que `g.user_id` == parâmetro de URL indicado, ou que o usuário seja admin | 401/403 `{"success": false, "message": ...}` |
 
 **Frescor de privilégio:** os decorators releem `tipo`/`ativo` do banco a cada requisição (`_load_fresh_user`). Conta desativada → 403 na próxima requisição; admin rebaixado perde o privilégio imediatamente; usuário excluído → 401. O token nunca **eleva** privilégio (o 1º gate é a claim); o banco só **revoga**. Sem banco acessível, degrada para as claims do token (as rotas de negócio já respondem 503 nesse cenário).
 
-**Atenção:** os erros dos decorators usam a chave `error`, não `message` — ver a seção seguinte.
+## Formatos de resposta
 
-## Formatos de resposta — não há envelope único
+Todo endpoint responde no **envelope plano** `{ "success": bool, ... }`: `success` é sempre o discriminador e os dados de domínio ficam no topo, ao lado dele (não aninhados sob `data`). O corpo é montado pelos helpers `ok()` / `err()` de `utils/responses.py`.
 
-A padronização num envelope `{success, message, ...}` foi **deferida** ([BE-01](./alinhamento-e-debitos.md#be-01)). O estado real são três estilos coexistindo:
+Sucesso:
+```json
+{ "success": true, "message": "...", "items": [ ] }
+```
 
-1. **`{"message": ...}`** — o mais comum. Erros de negócio e confirmações de mutação na maioria dos controllers:
-   ```json
-   { "message": "produto não encontrado" }
-   ```
-   Mutações costumam anexar o recurso: `{"message": "...", "user": {...}}`, `{"message": "...", "order": {...}}`.
-2. **`{"error": ...}`** — usado por **auth** (`jwt_service.py`) e **imagens** (`images_controller.py`):
-   ```json
-   { "error": "Token de autenticação não fornecido" }
-   ```
-3. **`{"success": ...}`** — usado só pelo **health**, pelos **error handlers globais** (404/500/405/413) e pelo erro de validação de query em `GET /api/products`:
-   ```json
-   { "success": false, "message": "Endpoint não encontrado" }
-   ```
+Erro — mesma forma, com a mensagem **sempre** em `message` (a chave `error` foi abolida, inclusive nos erros dos decorators JWT) e, em validação, o mapa `errors: { campo: motivo }`:
+```json
+{ "success": false, "message": "erro de validação", "errors": { "email": "obrigatório" } }
+```
 
-Recursos "crus" são retornados sem envelope: `GET /api/products/1` responde o documento do produto direto. Listagens paginadas usam `{"items": [...], "pagination": {...}}` (pedidos usam `"orders"`, favoritos usam `"favorites"` + `"total"`).
+**Exceções ao envelope:**
+- `GET /api/health` usa a forma **aninhada** `{ "success": true, "data": { ... } }`.
+- Endpoints que devolvem uma **lista pura** (ex.: `GET /api/categories/summary`) retornam o array direto.
+- `GET /api/products/<id>` e afins retornam o **documento cru** do recurso, sem envelope.
 
-Erros de validação de payload anexam um mapa `errors`: `{"message": "erro de validação", "errors": {"campo": "motivo"}}`.
+Listagens paginadas trazem `{ "items": [...], "pagination": {...} }` ao lado de `success` (pedidos usam `"orders"`, favoritos usam `"favorites"` + `"total"`).
 
 O `_id` interno do Mongo nunca vaza nas respostas — a serialização canônica é `utils/serialization.serialize_doc` (usuários passam por `normalize_user`, que também remove `senha_hash` e tokens). Exceção deliberada: o carrinho expõe o `_id` do documento de carrinho como string no campo `id`.
 
@@ -75,7 +72,7 @@ O clamp de `page_size` em 100 evita `.limit()` ilimitado. O helper canônico é 
 
 - **Error handlers** (`app/__init__.py`): 404, 405, 413 (payload > 16MB) e 500 respondem `{"success": false, "message": ...}`.
 - **Rate limiting** (flask-limiter, se instalado): limite default de **200/dia e 50/hora por IP** em todas as rotas, mais limites específicos nas rotas sensíveis de usuários (login 10/min, exclusão de conta 5/h etc. — ver [api/users-auth.md](./api/users-auth.md)). Storage configurável via `RATELIMIT_STORAGE_URI` (default `memory://`, com warning em produção).
-- **Banco indisponível**: o app sobe mesmo sem `MONGODB_URI`. Toda rota que toca o banco é decorada com `@require_db` (`utils/db.py`) e responde **503** `{"message": "Banco de dados indisponível"}` quando `app.db is None`.
+- **Banco indisponível**: o app sobe mesmo sem `MONGODB_URI`. Toda rota que toca o banco é decorada com `@require_db` (`utils/db.py`) e responde **503** `{"success": false, "message": "Banco de dados indisponível"}` quando `app.db is None`.
 - **CORS**: origens permitidas vêm de `FRONTEND_ORIGIN` (CSV) ou de uma lista default (Vite, Expo, Vercel). Headers permitidos incluem `Authorization`; `X-User-Id` **não** é mais um header aceito.
 
 ## Índice de recursos

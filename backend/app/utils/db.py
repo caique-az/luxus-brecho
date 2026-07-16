@@ -1,7 +1,9 @@
 """Decorator de disponibilidade do banco para as views."""
 from functools import wraps
 
-from flask import current_app, jsonify
+from flask import current_app
+
+from .responses import err
 
 
 def require_db(f):
@@ -17,7 +19,7 @@ def require_db(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
         if getattr(current_app, "db", None) is None:
-            return jsonify(message="Banco de dados indisponível"), 503
+            return err("Banco de dados indisponível", 503)
         return f(*args, **kwargs)
 
     return wrapper

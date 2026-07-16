@@ -6,7 +6,8 @@ Modelo e utilidades para a coleção de produtos.
 """
 from typing import Dict, Any, Tuple
 from pymongo import ASCENDING, TEXT
-from pymongo.collection import ReturnDocument
+
+from ..utils.counters import next_sequence
 
 COLLECTION_NAME = "products"
 COUNTERS_COLLECTION = "counters"
@@ -217,6 +218,12 @@ def ensure_products_collection(db):
         print(f"Erro ao criar índice em 'categoria': {e}")
 
     try:
+        # Suporta o sort padrão da listagem (por título) sem sort em memória
+        coll.create_index([("titulo", ASCENDING)], name="idx_titulo")
+    except Exception as e:
+        print(f"Erro ao criar índice em 'titulo': {e}")
+
+    try:
         coll.create_index([("titulo", TEXT), ("descricao", TEXT)], name="txt_titulo_descricao")
     except Exception as e:
         print(f"Erro ao criar índice de texto: {e}")
@@ -247,13 +254,7 @@ def ensure_counters_collection(db):
 
 def get_next_sequence(db, name: str) -> int:
     """Obtém o próximo número sequencial para um contador nomeado."""
-    doc = db[COUNTERS_COLLECTION].find_one_and_update(
-        {"name": name},
-        {"$inc": {"seq": 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER,
-    )
-    return int(doc["seq"]) if doc and "seq" in doc else 1
+    return next_sequence(db, name)
 
 
 def prepare_new_product(db, payload: Dict[str, Any]) -> Tuple[bool, Dict[str, str], Dict[str, Any]]:
@@ -265,10 +266,9 @@ def prepare_new_product(db, payload: Dict[str, Any]) -> Tuple[bool, Dict[str, st
     if not ok:
         return False, errors, {}
 
-    # Gera id se não informado
+    # Gera id se não informado (get_next_sequence faz upsert do contador)
     if "id" not in data:
         try:
-            ensure_counters_collection(db)
             data["id"] = get_next_sequence(db, COUNTER_KEY_PRODUCTS)
         except Exception as e:
             errors["id"] = f"falha ao gerar id: {e}"

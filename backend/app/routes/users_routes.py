@@ -79,15 +79,9 @@ def delete_user_endpoint(id):
 
 # Rotas de autenticação (com rate limiting)
 @users_bp.route("/auth", methods=["POST"])
+@_apply_rate_limit("10 per minute;50 per hour")
 def auth_endpoint():
     """Endpoint de autenticação com rate limiting."""
-    limiter = _get_limiter()
-    if limiter:
-        # 10 tentativas por minuto, 50 por hora
-        @limiter.limit("10 per minute;50 per hour")
-        def limited_auth():
-            return authenticate_user()
-        return limited_auth()
     return authenticate_user()
 
 @users_bp.route("/<int:id>/change-password", methods=["PUT"])
@@ -104,42 +98,24 @@ def refresh_token_route():
 
 # Rotas de recuperação de senha (com rate limiting)
 @users_bp.route("/forgot-password", methods=["POST"])
+@_apply_rate_limit("5 per hour")
 def forgot_password_endpoint():
     """Endpoint de recuperação de senha com rate limiting."""
-    limiter = _get_limiter()
-    if limiter:
-        # 5 tentativas por hora
-        @limiter.limit("5 per hour")
-        def limited_forgot():
-            return forgot_password()
-        return limited_forgot()
     return forgot_password()
 
 @users_bp.route("/reset-password", methods=["POST"])
+@_apply_rate_limit("10 per hour")
 def reset_password_endpoint():
     """Endpoint de reset de senha com rate limiting."""
-    limiter = _get_limiter()
-    if limiter:
-        # 10 tentativas por hora
-        @limiter.limit("10 per hour")
-        def limited_reset():
-            return reset_password()
-        return limited_reset()
     return reset_password()
 
 # Rotas de confirmação de email
 users_bp.route("/confirm-email/<string:token>", methods=["GET"])(confirm_email)
 
 @users_bp.route("/resend-confirmation", methods=["POST"])
+@_apply_rate_limit("3 per hour")
 def resend_confirmation_endpoint():
     """Endpoint de reenvio de confirmação com rate limiting."""
-    limiter = _get_limiter()
-    if limiter:
-        # 3 tentativas por hora
-        @limiter.limit("3 per hour")
-        def limited_resend():
-            return resend_confirmation_email()
-        return limited_resend()
     return resend_confirmation_email()
 
 # Rotas de informações

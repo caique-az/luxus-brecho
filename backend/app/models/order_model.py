@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from pymongo import ASCENDING, DESCENDING
 
+from ..utils.counters import next_sequence
+
 COLLECTION_NAME = "orders"
 COUNTER_KEY = "orders"
 
@@ -53,15 +55,7 @@ def ensure_indexes(db) -> None:
 
 def get_next_id(db) -> int:
     """Gera próximo ID sequencial para pedidos."""
-    from pymongo.collection import ReturnDocument
-    counters = db["counters"]
-    result = counters.find_one_and_update(
-        {"name": COUNTER_KEY},
-        {"$inc": {"seq": 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER
-    )
-    return result["seq"]
+    return next_sequence(db, COUNTER_KEY)
 
 
 def normalize_order(order: Dict[str, Any]) -> Dict[str, Any]:

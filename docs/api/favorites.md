@@ -3,7 +3,7 @@
 > Fonte: `backend/app/routes/favorites_routes.py` · `backend/app/controllers/favorites_controller.py` · `backend/app/models/favorite_model.py`
 > Contrato geral: [../api-reference.md](../api-reference.md) · Divergências: [../alinhamento-e-debitos.md](../alinhamento-e-debitos.md)
 
-Todas as rotas exigem **`@jwt_required`**; a identidade vem de `g.user_id` (o id do token). O esquema antigo por header `X-User-Id` **foi removido** — o header nem consta mais no CORS. Clientes que ainda dependem dele estão quebrados ou carregam legado ([FE-01](../alinhamento-e-debitos.md#fe-01), [MB-02](../alinhamento-e-debitos.md#mb-02)).
+Todas as rotas exigem **`@jwt_required`**; a identidade vem de `g.user_id` (o id do token). O esquema antigo por header `X-User-Id` **foi removido** — o header nem consta mais no CORS. Web e mobile já enviam o Bearer, mas ainda anexam o `X-User-Id` legado — ignorado pelo backend ([FE-01](../alinhamento-e-debitos.md#fe-01), [MB-02](../alinhamento-e-debitos.md#mb-02)).
 
 ## Resumo
 

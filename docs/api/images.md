@@ -5,7 +5,7 @@
 
 Integração com **Supabase Storage** (bucket `SUPABASE_BUCKET`, default `product-images`). O serviço redimensiona imagens (máx 1200×1200, JPEG qualidade 85 via Pillow), nomeia com UUID sob `product_<id>/` e retorna **signed URL de 1 ano** (fallback para URL pública).
 
-**Atenção ao formato de erro:** este é um dos módulos que respondem `{"error": ...}` em vez de `{"message": ...}` ([BE-01](../alinhamento-e-debitos.md#be-01)).
+Erros seguem o **envelope padrão** `{"success": false, "message": ...}` — a antiga chave `error` deste módulo foi unificada em `message` (ver [Formatos de resposta](../api-reference.md#formatos-de-resposta)).
 
 ## Resumo
 

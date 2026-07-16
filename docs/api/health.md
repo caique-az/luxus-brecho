@@ -14,7 +14,7 @@ Verificação de saúde da API. Não toca o banco (para saber se o Mongo está c
 
 ## `GET /api/health`
 
-Um dos poucos endpoints com envelope `{success, ...}` ([BE-01](../alinhamento-e-debitos.md#be-01)):
+Único endpoint com a forma **aninhada** `{success, data}` (os demais usam o envelope plano — ver [Formatos de resposta](../api-reference.md#formatos-de-resposta)):
 
 ```json
 {

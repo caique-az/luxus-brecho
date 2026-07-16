@@ -38,15 +38,16 @@ Roteamento é o Expo Router: criar `app/nome.tsx` cria a rota `/nome`; `app/(tab
 
 ## Padrões de API
 
-- **Formato de resposta:** não há envelope único hoje — a padronização em `{success, ...}` foi deferida ([BE-01](./alinhamento-e-debitos.md#be-01)). Em código novo, use `{"message": ...}` (o estilo majoritário) e `errors: { campo: motivo }` em validação; consulte os formatos reais em [api-reference.md](./api-reference.md#formatos-de-resposta--não-há-envelope-único). Não introduza um quarto estilo.
+- Respostas seguem o envelope **plano** `{ "success": bool, "message": str, ... }`: os dados de domínio ficam no topo, ao lado de `success` (não aninhados sob `data`). Em **controllers, rotas e errorhandlers**, monte sempre com os helpers `ok()` / `err()` de `app/utils/responses.py`, nunca com `jsonify` cru — assim `success` serve de discriminador em todo endpoint e a mensagem de erro fica sempre em `message` (a chave `error` foi abolida, inclusive nos erros de autenticação dos decorators JWT). Erros de validação trazem `errors: { campo: motivo }` (sempre um **dict**; listas de falhas usam outra chave, ex.: `upload_errors`). **Exceções ao envelope:** endpoints que devolvem uma **lista pura** (ex.: `/categories/summary`) e o `GET /api/health`, que usa a forma aninhada `{ success, data }`. Formatos reais em [api-reference.md](./api-reference.md#formatos-de-resposta).
 - IDs são **inteiros sequenciais** gerados pela coleção de contadores (`get_next_sequence`/`get_next_id`), não `ObjectId`. O `_id` do Mongo nunca vaza na resposta — use `utils/serialization.serialize_doc` (ou `normalize_*` do model, que também remove campos sensíveis).
 - Schema e índices são garantidos em código via `ensure_*()`, executados no `create_app()`. **Não** crie índices manualmente no banco — adicione ao model.
 - `strict_slashes` está desligado globalmente; não dependa de barra final.
 
 ## Autenticação
 
-- Há **um único esquema**: JWT via `Authorization: Bearer`. Aplique os decorators existentes de `services/jwt_service.py`: `@jwt_required`, `@jwt_optional`, `@admin_required`, `@owner_or_admin_required('<param>')`. Não invente esquema próprio por recurso (o antigo `X-User-Id` de favoritos foi removido por ser falsificável).
-- A identidade do usuário autenticado vem de `g.user_id` (int) — nunca de um id no corpo da requisição ou em header customizado.
+- Há **um único esquema**: JWT via `Authorization: Bearer`. Todos os recursos protegidos usam os decorators de `services/jwt_service.py` — `@jwt_required`, `@jwt_optional`, `@admin_required`, `@owner_or_admin_required('<param>')` —, incluindo usuários, escrita de produtos e categorias e, agora, carrinho, pedidos e favoritos. Não invente esquema próprio por recurso (o antigo `X-User-Id` de favoritos foi removido por ser falsificável).
+- A identidade do usuário autenticado vem sempre de **`g.user_id`** (int, derivado da claim `sub`) — nunca de parâmetro de URL, corpo da requisição ou header customizado. O banco guarda `id` como int em users/carts/orders/favorites.
+- Toda função de controller que acessa o banco usa o decorator **`@require_db`** (`app/utils/db.py`), que padroniza o 503 (no envelope) quando `current_app.db is None`. Não reimplemente a guarda `if db is None` à mão.
 - Nunca logue tokens nem senhas. `JWT_SECRET_KEY` e credenciais ficam em `.env` (nunca commitados).
 
 ## Testes

@@ -1,11 +1,12 @@
 """
 Controller para gerenciamento de pedidos.
 """
-from flask import jsonify, request, current_app, g
+from flask import request, current_app, g
 from app.utils.db import require_db
 from datetime import datetime
 from typing import Dict, Any
 
+from ..utils.responses import ok, err
 from ..models.order_model import (
     get_collection,
     get_next_id,
@@ -20,7 +21,7 @@ def _forbidden_if_not_owner(order):
     """Retorna uma resposta 403 se o solicitante não for o dono do pedido nem
     admin; caso contrário, None. Requer g.user_id/g.user_type (jwt_required)."""
     if g.user_type != "Administrador" and order.get("user_id") != g.user_id:
-        return jsonify(message="Acesso negado. Você não tem permissão para este pedido"), 403
+        return err("Acesso negado. Você não tem permissão para este pedido", 403)
     return None
 
 
@@ -46,7 +47,7 @@ def get_user_orders(user_id: int):
         skip = (page - 1) * page_size
         orders = list(coll.find(query).sort("created_at", -1).skip(skip).limit(page_size))
         
-        return jsonify({
+        return ok({
             "orders": [normalize_order(order) for order in orders],
             "pagination": {
                 "page": page,
@@ -57,7 +58,7 @@ def get_user_orders(user_id: int):
 
     except Exception as e:
         current_app.logger.error(f"Erro ao obter pedidos: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)
 
 
 @require_db
@@ -70,17 +71,17 @@ def get_order_by_id(order_id: int):
         order = coll.find_one({"id": order_id})
 
         if not order:
-            return jsonify(message="Pedido não encontrado"), 404
+            return err("Pedido não encontrado", 404)
 
         denied = _forbidden_if_not_owner(order)
         if denied:
             return denied
 
-        return jsonify(normalize_order(order))
+        return ok(normalize_order(order))
 
     except Exception as e:
         current_app.logger.error(f"Erro ao obter pedido: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)
 
 
 @require_db
@@ -91,14 +92,14 @@ def create_order(user_id: int):
     try:
         payload = request.get_json()
         if not payload:
-            return jsonify(message="Payload JSON é obrigatório"), 400
+            return err("Payload JSON é obrigatório")
 
         payload["user_id"] = user_id
-        
+
         # Valida dados do pedido
         is_valid, error_msg = validate_order(payload)
         if not is_valid:
-            return jsonify(message=error_msg), 400
+            return err(error_msg)
 
         # Resolve os produtos. Peça única: sem quantidade, cada preço conta uma vez.
         # Qualquer product_id inválido (não-int → injeção NoSQL) ou inexistente/
@@ -111,7 +112,7 @@ def create_order(user_id: int):
         for item in payload.get("items", []):
             product_id = coerce_product_id(item.get("product_id"))
             if product_id is None:
-                return jsonify(message="product_id inválido no pedido"), 400
+                return err("product_id inválido no pedido")
             if product_id not in requested_ids:
                 requested_ids.append(product_id)
 
@@ -127,10 +128,10 @@ def create_order(user_id: int):
         for product_id in requested_ids:
             product = products_by_id.get(product_id)
             if not product:
-                return jsonify(message=f"Produto {product_id} não encontrado"), 404
+                return err(f"Produto {product_id} não encontrado", 404)
 
             if product.get("status") != "disponivel":
-                return jsonify(message=f"Produto '{product.get('titulo')}' não está disponível"), 400
+                return err(f"Produto '{product.get('titulo')}' não está disponível")
 
             preco = product.get("preco", 0)
             items_with_details.append({
@@ -143,7 +144,7 @@ def create_order(user_id: int):
             product_ids_to_update.append(product_id)
 
         if not items_with_details:
-            return jsonify(message="Pedido deve ter pelo menos um item válido"), 400
+            return err("Pedido deve ter pelo menos um item válido")
 
         coll = get_collection(db)
         cart_coll = get_cart_collection(db)
@@ -194,14 +195,11 @@ def create_order(user_id: int):
             # Sem suporte a transações
             _create_order_without_transaction(coll, products_coll, cart_coll, order, product_ids_to_update, user_id, now)
 
-        return jsonify({
-            "message": "Pedido criado com sucesso",
-            "order": normalize_order(order),
-        }), 201
+        return ok(message="Pedido criado com sucesso", status=201, order=normalize_order(order))
 
     except Exception as e:
         current_app.logger.error(f"Erro ao criar pedido: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)
 
 
 def _create_order_without_transaction(coll, products_coll, cart_coll, order, product_ids, user_id, now):
@@ -228,11 +226,11 @@ def update_order_status(order_id: int):
     try:
         payload = request.get_json()
         if not payload:
-            return jsonify(message="Payload JSON é obrigatório"), 400
+            return err("Payload JSON é obrigatório")
 
         new_status = payload.get("status")
         if not new_status or new_status not in ORDER_STATUS:
-            return jsonify(message=f"Status inválido. Valores permitidos: {', '.join(ORDER_STATUS)}"), 400
+            return err(f"Status inválido. Valores permitidos: {', '.join(ORDER_STATUS)}")
 
         coll = get_collection(db)
         now = datetime.utcnow()
@@ -243,17 +241,13 @@ def update_order_status(order_id: int):
         )
 
         if result.matched_count == 0:
-            return jsonify(message="Pedido não encontrado"), 404
+            return err("Pedido não encontrado", 404)
 
-        return jsonify({
-            "message": "Status atualizado com sucesso",
-            "order_id": order_id,
-            "status": new_status,
-        })
+        return ok({"order_id": order_id, "status": new_status}, message="Status atualizado com sucesso")
 
     except Exception as e:
         current_app.logger.error(f"Erro ao atualizar status: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)
 
 
 @require_db
@@ -269,17 +263,17 @@ def cancel_order(order_id: int):
         # Busca o pedido
         order = coll.find_one({"id": order_id})
         if not order:
-            return jsonify(message="Pedido não encontrado"), 404
+            return err("Pedido não encontrado", 404)
 
         denied = _forbidden_if_not_owner(order)
         if denied:
             return denied
 
         if order.get("status") == "cancelado":
-            return jsonify(message="Pedido já está cancelado"), 400
+            return err("Pedido já está cancelado")
 
         if order.get("status") in ["enviado", "entregue"]:
-            return jsonify(message="Não é possível cancelar pedido já enviado ou entregue"), 400
+            return err("Não é possível cancelar pedido já enviado ou entregue")
 
         # Restaura status dos produtos para disponível
         for item in order.get("items", []):
@@ -294,11 +288,8 @@ def cancel_order(order_id: int):
             {"$set": {"status": "cancelado", "updated_at": now}}
         )
 
-        return jsonify({
-            "message": "Pedido cancelado com sucesso",
-            "order_id": order_id,
-        })
+        return ok(message="Pedido cancelado com sucesso", order_id=order_id)
 
     except Exception as e:
         current_app.logger.error(f"Erro ao cancelar pedido: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)

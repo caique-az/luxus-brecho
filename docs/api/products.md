@@ -31,7 +31,7 @@ Query string validada por marshmallow (`ProductQuerySchema`):
 | `categoria` | — | ≤ 50 chars | Filtro exato por categoria |
 | `q` | — | ≤ 100 chars | Busca `$text` no índice `titulo`+`descricao`, ordenada por relevância |
 
-Parâmetro inválido → 400 `{"success": false, "message": "Parâmetros inválidos", "errors": {...}}` (este é um dos raros pontos que respondem `success` — [BE-01](../alinhamento-e-debitos.md#be-01)). Sem `q`, a ordenação é por `titulo` ascendente. Resposta:
+Parâmetro inválido → 400 `{"success": false, "message": "Parâmetros inválidos", "errors": {...}}` (envelope padrão). Sem `q`, a ordenação é por `titulo` ascendente. Resposta:
 
 ```json
 {

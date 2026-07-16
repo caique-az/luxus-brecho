@@ -17,7 +17,7 @@ O projeto é um **monorepo** com três aplicações que consomem a mesma API:
 
 A regra mais importante do projeto: **o backend é a única fonte de verdade**. Frontend e mobile são clientes independentes — não compartilham código entre si, apenas o contrato da API. Toda validação de negócio (preço, categorias válidas, permissões) acontece no backend; os clientes replicam validações apenas para UX.
 
-Os dois clientes **não estão no mesmo estágio de alinhamento** com o backend: o web acompanha o contrato atual (JWT, carrinho de peça única), com resíduos pontuais; o mobile ficou para trás (não implementa JWT e ainda modela `quantity`). O mapa completo está na [matriz de alinhamento](./alinhamento-e-debitos.md#matriz-de-alinhamento).
+Ambos os clientes usam **JWT** (Bearer + refresh em 401) e acompanham o grosso do contrato atual, com resíduos pontuais — no web, o `X-User-Id` legado em favoritos; no mobile, o mesmo resíduo em favoritos e o carrinho que ainda modela `quantity`. O mapa completo está na [matriz de alinhamento](./alinhamento-e-debitos.md#matriz-de-alinhamento).
 
 ```mermaid
 graph TD
@@ -35,7 +35,7 @@ graph TD
     end
 
     FE -->|HTTP + JWT| API
-    MO -->|"HTTP (sem JWT — ver débitos)"| API
+    MO -->|HTTP + JWT| API
     API --> DB
     API --> ST
     API --> SMTP
@@ -229,7 +229,7 @@ schemas/             →  Zod + hooks/useZodForm.ts
 - **`constants/config.ts`** centraliza a configuração via `EXPO_PUBLIC_*`. A `getApiUrl()` efetivamente usada vem de `utils/networkUtils.ts` (produção → `PRODUCTION_URL`; dev → `NETWORK_URL`, o IP da máquina na rede local).
 - **`services/api.ts`** implementa retry com backoff e **cache local de respostas GET** via AsyncStorage.
 
-**Importante:** o mobile está atrás do contrato atual do backend — não implementa JWT, favoritos usam o header removido `X-User-Id`, e o carrinho ainda modela `quantity`. O estado real está em [apps/mobile.md](./apps/mobile.md) e na [matriz de alinhamento](./alinhamento-e-debitos.md#matriz-de-alinhamento).
+**Importante:** o mobile agora usa JWT (Bearer + refresh), mas ainda carrega resíduos — favoritos anexam o header legado `X-User-Id` (ignorado pelo backend) e o carrinho modela `quantity`. O estado real está em [apps/mobile.md](./apps/mobile.md) e na [matriz de alinhamento](./alinhamento-e-debitos.md#matriz-de-alinhamento).
 
 ## Configuração de rede entre dispositivos
 

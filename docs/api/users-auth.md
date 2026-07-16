@@ -76,7 +76,7 @@ Os rate limits específicos só se aplicam quando `flask-limiter` está instalad
 
 ## Exclusão de conta (2 passos, autenticada)
 
-Ambas exigem `@jwt_required`; **o alvo é sempre `g.user_id`** (o id do token) — não existe mais `user_id` no corpo. Clientes que ainda enviam `user_id` no corpo sem `Authorization` estão quebrados ([FE-02](../alinhamento-e-debitos.md#fe-02), [MB-03](../alinhamento-e-debitos.md#mb-03)).
+Ambas exigem `@jwt_required`; **o alvo é sempre `g.user_id`** (o id do token) — o `user_id` do corpo é ignorado. Web e mobile já enviam o `Authorization: Bearer` nesses fluxos.
 
 1. **`POST /api/users/request-deletion`** — sem body relevante. Gera código de **6 dígitos** (expira em 30 min, contador de tentativas zerado) e o envia por e-mail. 200: `{"message": "Código de verificação enviado para seu email", "email_sent": true}`.
 2. **`POST /api/users/confirm-deletion`** — body `{"code": "123456"}`. Comparação em tempo constante (`secrets.compare_digest`); código errado incrementa `deletion_attempts` (400) e a **5ª falha invalida o código** (429); código expirado → 410. Sucesso: `delete_one` **permanente** — 200 `{"message": "Conta excluída com sucesso", "deleted": true}`.

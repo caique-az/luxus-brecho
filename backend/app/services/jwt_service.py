@@ -8,7 +8,12 @@ import jwt
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, Tuple
 from functools import wraps
-from flask import request, jsonify, g, current_app
+from flask import request, g, current_app
+
+# Import absoluto (não relativo): este módulo é reimportado isoladamente em
+# tests/test_jwt_service.py via spec_from_file_location, contexto em que um
+# ``from ..utils...`` não tem pacote pai e falharia.
+from app.utils.responses import err
 
 
 # Configurações JWT
@@ -28,12 +33,12 @@ JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)  # Token de refresh expira em 30 
 def create_access_token(user_id: int, user_type: str, email: str) -> str:
     """
     Cria um token de acesso JWT.
-    
+
     Args:
         user_id: ID do usuário
         user_type: Tipo do usuário (Cliente/Administrador)
         email: Email do usuário
-        
+
     Returns:
         Token JWT codificado
     """
@@ -52,10 +57,10 @@ def create_access_token(user_id: int, user_type: str, email: str) -> str:
 def create_refresh_token(user_id: int) -> str:
     """
     Cria um token de refresh JWT.
-    
+
     Args:
         user_id: ID do usuário
-        
+
     Returns:
         Token JWT de refresh codificado
     """
@@ -72,10 +77,10 @@ def create_refresh_token(user_id: int) -> str:
 def decode_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
     """
     Decodifica e valida um token JWT.
-    
+
     Args:
         token: Token JWT a ser decodificado
-        
+
     Returns:
         Tupla (sucesso, payload, mensagem_erro)
     """
@@ -91,7 +96,7 @@ def decode_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]], Optional[s
 def get_token_from_header() -> Optional[str]:
     """
     Extrai o token do header Authorization.
-    
+
     Returns:
         Token JWT ou None se não encontrado
     """
@@ -123,7 +128,7 @@ def _load_fresh_user(user_id: int):
     do banco (1 query) e o tratamos como fonte da verdade. O token nunca ELEVA
     privilégio (apenas o banco concede admin); o banco só pode REVOGÁ-lo.
 
-    Retorna uma tupla (user, error):
+    Retorna uma tupla (user, deny):
       - (user, None): usuário ativo encontrado — use `user` como fonte da verdade;
       - (None, None): não há banco acessível, degrada para as claims do token
         (só ocorre em testes isolados de decorator ou com o Mongo fora, situação
@@ -136,9 +141,9 @@ def _load_fresh_user(user_id: int):
     from app.models.user_model import get_collection
     user = get_collection(db).find_one({'id': user_id})
     if not user:
-        return None, (jsonify({'error': 'Usuário não encontrado'}), 401)
+        return None, err('Usuário não encontrado', 401)
     if not user.get('ativo', True):
-        return None, (jsonify({'error': 'Conta desativada'}), 403)
+        return None, err('Conta desativada', 403)
     return user, None
 
 
@@ -162,28 +167,28 @@ def jwt_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = get_token_from_header()
-        
+
         if not token:
-            return jsonify({'error': 'Token de autenticação não fornecido'}), 401
-        
+            return err('Token de autenticação não fornecido', 401)
+
         success, payload, error = decode_token(token)
-        
+
         if not success:
-            return jsonify({'error': error}), 401
-        
+            return err(error, 401)
+
         if payload.get('token_type') != 'access':
-            return jsonify({'error': 'Tipo de token inválido'}), 401
-        
+            return err('Tipo de token inválido', 401)
+
         # Adiciona informações do usuário ao contexto da requisição
         user_id = get_user_id_from_payload(payload)
         if user_id is None:
-            return jsonify({'error': 'Token inválido: identificação de usuário ausente'}), 401
+            return err('Token inválido: identificação de usuário ausente', 401)
 
         # Frescor: rejeita conta inexistente/desativada e usa o banco como fonte
         # da verdade para tipo/email (degrada para as claims se não houver banco).
-        user, err = _load_fresh_user(user_id)
-        if err:
-            return err
+        user, deny = _load_fresh_user(user_id)
+        if deny:
+            return deny
 
         _set_identity(user_id, user, payload)
 
@@ -201,7 +206,7 @@ def jwt_optional(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = get_token_from_header()
-        
+
         if token:
             success, payload, _ = decode_token(token)
             if success and payload.get('token_type') == 'access':
@@ -216,9 +221,9 @@ def jwt_optional(f):
             g.user_id = None
             g.user_type = None
             g.user_email = None
-        
+
         return f(*args, **kwargs)
-    
+
     return decorated
 
 
@@ -230,34 +235,34 @@ def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = get_token_from_header()
-        
+
         if not token:
-            return jsonify({'error': 'Token de autenticação não fornecido'}), 401
-        
+            return err('Token de autenticação não fornecido', 401)
+
         success, payload, error = decode_token(token)
-        
+
         if not success:
-            return jsonify({'error': error}), 401
-        
+            return err(error, 401)
+
         if payload.get('token_type') != 'access':
-            return jsonify({'error': 'Tipo de token inválido'}), 401
-        
+            return err('Tipo de token inválido', 401)
+
         # 1º gate (barato): o token precisa reivindicar admin. Um token nunca
         # eleva privilégio, então quem não reivindica admin já é barrado aqui.
         if payload.get('type') != 'Administrador':
-            return jsonify({'error': 'Acesso negado. Requer privilégios de administrador'}), 403
+            return err('Acesso negado. Requer privilégios de administrador', 403)
 
         user_id = get_user_id_from_payload(payload)
         if user_id is None:
-            return jsonify({'error': 'Token inválido: identificação de usuário ausente'}), 401
+            return err('Token inválido: identificação de usuário ausente', 401)
 
         # 2º gate (frescor): o banco confirma que ainda é admin e está ativo.
         # Um admin rebaixado ou desativado perde o acesso na próxima requisição.
-        user, err = _load_fresh_user(user_id)
-        if err:
-            return err
+        user, deny = _load_fresh_user(user_id)
+        if deny:
+            return deny
         if user is not None and user.get('tipo') != 'Administrador':
-            return jsonify({'error': 'Acesso negado. Requer privilégios de administrador'}), 403
+            return err('Acesso negado. Requer privilégios de administrador', 403)
 
         _set_identity(user_id, user, payload)
 
@@ -269,7 +274,7 @@ def admin_required(f):
 def owner_or_admin_required(user_id_param: str = 'user_id'):
     """
     Decorator que exige que o usuário seja o dono do recurso ou administrador.
-    
+
     Args:
         user_id_param: Nome do parâmetro da URL que contém o user_id
     """
@@ -277,27 +282,27 @@ def owner_or_admin_required(user_id_param: str = 'user_id'):
         @wraps(f)
         def decorated(*args, **kwargs):
             token = get_token_from_header()
-            
+
             if not token:
-                return jsonify({'error': 'Token de autenticação não fornecido'}), 401
-            
+                return err('Token de autenticação não fornecido', 401)
+
             success, payload, error = decode_token(token)
-            
+
             if not success:
-                return jsonify({'error': error}), 401
-            
+                return err(error, 401)
+
             if payload.get('token_type') != 'access':
-                return jsonify({'error': 'Tipo de token inválido'}), 401
-            
+                return err('Tipo de token inválido', 401)
+
             user_id = get_user_id_from_payload(payload)
             if user_id is None:
-                return jsonify({'error': 'Token inválido: identificação de usuário ausente'}), 401
+                return err('Token inválido: identificação de usuário ausente', 401)
 
             # Frescor: rejeita conta desativada e usa o tipo do banco (fonte da
             # verdade) para o bypass de admin — admin rebaixado perde o bypass.
-            user, err = _load_fresh_user(user_id)
-            if err:
-                return err
+            user, deny = _load_fresh_user(user_id)
+            if deny:
+                return deny
 
             _set_identity(user_id, user, payload)
 
@@ -310,10 +315,10 @@ def owner_or_admin_required(user_id_param: str = 'user_id'):
                     resource_user_id = None
 
             if g.user_type != 'Administrador' and g.user_id != resource_user_id:
-                return jsonify({'error': 'Acesso negado. Você não tem permissão para este recurso'}), 403
-            
+                return err('Acesso negado. Você não tem permissão para este recurso', 403)
+
             return f(*args, **kwargs)
-        
+
         return decorated
     return decorator
 
@@ -321,22 +326,22 @@ def owner_or_admin_required(user_id_param: str = 'user_id'):
 def refresh_access_token(refresh_token: str, db) -> Tuple[bool, Optional[Dict[str, str]], Optional[str]]:
     """
     Gera um novo access token usando um refresh token válido.
-    
+
     Args:
         refresh_token: Token de refresh
         db: Conexão com o banco de dados
-        
+
     Returns:
         Tupla (sucesso, tokens, mensagem_erro)
     """
     success, payload, error = decode_token(refresh_token)
-    
+
     if not success:
         return False, None, error
-    
+
     if payload.get('token_type') != 'refresh':
         return False, None, 'Token de refresh inválido'
-    
+
     user_id = get_user_id_from_payload(payload)
     if user_id is None:
         return False, None, 'Token de refresh inválido'
@@ -345,13 +350,13 @@ def refresh_access_token(refresh_token: str, db) -> Tuple[bool, Optional[Dict[st
     from app.models.user_model import get_collection
     users = get_collection(db)
     user = users.find_one({'id': user_id})
-    
+
     if not user:
         return False, None, 'Usuário não encontrado'
-    
+
     if not user.get('ativo', True):
         return False, None, 'Conta desativada'
-    
+
     # Gera novos tokens
     new_access_token = create_access_token(
         user_id=user['id'],
@@ -359,7 +364,7 @@ def refresh_access_token(refresh_token: str, db) -> Tuple[bool, Optional[Dict[st
         email=user['email']
     )
     new_refresh_token = create_refresh_token(user_id=user['id'])
-    
+
     return True, {
         'access_token': new_access_token,
         'refresh_token': new_refresh_token,

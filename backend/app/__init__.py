@@ -30,8 +30,9 @@ logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('werkzeug').setLevel(logging.INFO)
 
 # Agora importa as bibliotecas
-from flask import Flask, jsonify
+from flask import Flask
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, OperationFailure
 from pymongo.server_api import ServerApi
@@ -65,7 +66,10 @@ def _should_use_tls(uri: str) -> bool:
 
 def create_app():
     """Factory function para criar a aplicação Flask"""
-    
+    # Helpers de envelope de resposta (import local evita qualquer ciclo no
+    # carregamento do pacote app.utils).
+    from .utils.responses import ok, err
+
     # Carrega variáveis de ambiente
     load_dotenv()
     
@@ -226,12 +230,11 @@ def create_app():
     # Rota raiz
     @app.route('/', methods=['GET'])
     def index():
-        return jsonify({
+        return ok({
             'message': 'Luxus Brechó API está funcionando!',
             'version': '1.0.0',
             'status': 'online',
             'database': 'connected' if app.db is not None else 'disconnected',
-
             'endpoints': {
                 'health': '/api/health',
                 'products': '/api/products',
@@ -276,50 +279,55 @@ def create_app():
     # Error handlers
     @app.errorhandler(404)
     def not_found(error):
-        return jsonify({
-            'success': False,
-            'message': 'Endpoint não encontrado',
-            'available_endpoints': [
-                'GET /',
-                'GET /api/health',
-                'GET /api/products',
-                'POST /api/products',
-                'PUT /api/products/<id>',
-                'DELETE /api/products/<id>',
-                'GET /api/categories',
-                'POST /api/categories',
-                'GET /api/users',
-                'POST /api/users',
-                'GET /api/favorites',
-                'POST /api/favorites',
-                'DELETE /api/favorites/<product_id>',
-                'POST /api/favorites/toggle'
-            ]
-        }), 404
-    
+        return err('Endpoint não encontrado', 404, available_endpoints=[
+            'GET /',
+            'GET /api/health',
+            'GET /api/products',
+            'POST /api/products',
+            'PUT /api/products/<id>',
+            'DELETE /api/products/<id>',
+            'GET /api/categories',
+            'POST /api/categories',
+            'GET /api/users',
+            'POST /api/users',
+            'GET /api/favorites',
+            'POST /api/favorites',
+            'DELETE /api/favorites/<product_id>',
+            'POST /api/favorites/toggle'
+        ])
+
     @app.errorhandler(500)
     def internal_error(error):
-        return jsonify({
-            'success': False,
-            'message': 'Erro interno do servidor',
-            'error': str(error) if app.config['DEBUG'] else 'Erro interno'
-        }), 500
-    
+        return err(
+            'Erro interno do servidor',
+            500,
+            detail=str(error) if app.config['DEBUG'] else 'Erro interno',
+        )
+
     @app.errorhandler(405)
     def method_not_allowed(error):
-        return jsonify({
-            'success': False,
-            'message': 'Método não permitido para este endpoint'
-        }), 405
-    
+        return err('Método não permitido para este endpoint', 405)
+
     @app.errorhandler(413)
     def request_entity_too_large(error):
-        return jsonify({
-            'success': False,
-            'message': 'Arquivo muito grande',
-            'max_size': '16MB'
-        }), 413
-    
+        return err('Arquivo muito grande', 413, max_size='16MB')
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(error):
+        # Handlers de HTTPException (404/405/413/...) têm precedência; se um
+        # chegar aqui, deixa o Flask processá-lo normalmente.
+        if isinstance(error, HTTPException):
+            return error
+        # Rede de segurança única para exceções não tratadas nos controllers:
+        # loga com stack trace e devolve o envelope padrão em vez de deixar
+        # cada função reimplementar try/except → 500.
+        app.logger.exception(f"Erro não tratado: {error}")
+        return err(
+            'Erro interno do servidor',
+            500,
+            detail=str(error) if app.config['DEBUG'] else 'Erro interno',
+        )
+
     print("🚀 Aplicação Flask criada com sucesso!")
     
     return app

@@ -5,17 +5,15 @@
 
 App da loja em **Expo ^49** (expo-router ^2, React Native 0.72), TypeScript, NativeWind ^2, Zustand ^5, Zod ^3, AsyncStorage.
 
-**Este é o app mais defasado em relação ao backend.** Em resumo: não implementa JWT, favoritos e exclusão de conta usam o esquema legado removido do backend (ambos **quebrados**), o carrinho ainda modela `quantity`, e não existe fluxo de checkout funcional. A lista completa: [débitos do mobile](../alinhamento-e-debitos.md#débitos-do-mobile).
+Estado de alinhamento com o backend: o app usa **JWT real** (armazena tokens, injeta `Authorization: Bearer`, renova em 401) e a exclusão de conta foi corrigida. Resíduos conhecidos: favoritos ainda anexam o `X-User-Id` legado ([MB-02](../alinhamento-e-debitos.md#mb-02)), o carrinho ainda modela `quantity` ([MB-04](../alinhamento-e-debitos.md#mb-04)) e não há fluxo de checkout funcional ([MB-05](../alinhamento-e-debitos.md#mb-05)). A lista completa: [débitos do mobile](../alinhamento-e-debitos.md#débitos-do-mobile).
 
 ## Autenticação — estado real
 
-**Não há JWT** ([MB-01](../alinhamento-e-debitos.md#mb-01)): o `authService.login` (`services/auth.ts`) apenas grava a flag `'authenticated'` e o `user_data` no AsyncStorage; `isAuthenticated()` só checa a flag. Não existe nenhuma ocorrência de `Authorization`/`Bearer` no código do mobile — nem refresh, nem expiração.
+**JWT real**: o `authService.login` (`services/auth.ts`) grava `access_token`/`refresh_token` no AsyncStorage; `getAuthHeaders()` monta o `Authorization: Bearer` e há renovação automática em 401 (`refreshAccessToken`). O `ApiService` (`services/api.ts`) injeta esse header em toda requisição com sessão.
 
-Consequências práticas contra o backend atual:
+Resíduo conhecido:
 
-- **Favoritos** (`services/favorites.ts`): `fetchWithUserId` injeta o header `X-User-Id` lido do AsyncStorage — o backend removeu esse esquema; todas as chamadas respondem 401 ([MB-02](../alinhamento-e-debitos.md#mb-02)).
-- **Exclusão de conta** (`services/auth.ts:239-273`): envia `user_id` no corpo, sem token — 401 ([MB-03](../alinhamento-e-debitos.md#mb-03)).
-- Qualquer rota protegida por posse (carrinho, pedidos) responde 401 para o app.
+- **Favoritos** (`services/favorites.ts`): `fetchWithUserId` já injeta o `Authorization: Bearer` (via `getAuthHeaders()`), mas ainda anexa o `X-User-Id` legado lido do AsyncStorage — o backend ignora o header extra ([MB-02](../alinhamento-e-debitos.md#mb-02)).
 
 ## Rotas (Expo Router, `app/`)
 
@@ -37,7 +35,7 @@ Consequências práticas contra o backend atual:
 
 - timeout `CONFIG.API.TIMEOUT` (10s); retry 2× com backoff exponencial (base 2s) para timeout/erros ≥ 500;
 - **cache** de GETs via `cacheManager` (AsyncStorage): produtos 2 min, resumo de categorias 5 min; invalidado nas mutações de produto;
-- **não injeta Authorization** em nenhuma requisição;
+- injeta o `Authorization: Bearer` quando há sessão (via `authService.getAuthHeaders()`), preservando headers já definidos pela chamada;
 - cobre produtos, categorias, imagens e health/testConnection.
 
 **`constants/config.ts`** — objeto `CONFIG` com tudo configurável por `EXPO_PUBLIC_*` (API, NETWORK, CART, PAGINATION, CATEGORIES, APP, DEBUG). Em dev, faz `require('../network-config.json')` para descobrir a `NETWORK_URL` (gerado por `npm run dev` na raiz).

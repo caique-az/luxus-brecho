@@ -26,7 +26,7 @@ rota (routes/X_routes.py)
 
 ## `app/services/`
 
-**`jwt_service.py`** — PyJWT, HS256 fixo ([BE-05](../alinhamento-e-debitos.md#be-05)); `JWT_SECRET_KEY` obrigatória (RuntimeError no import). Access 24h / refresh 30d. Convenção única de identidade: `sub` é gravado como str e lido como int (`get_user_id_from_payload`). Os 4 decorators + `_load_fresh_user` (frescor de privilégio: relê `tipo`/`ativo` a cada request; o token nunca eleva privilégio, o banco só revoga). Erros de auth respondem `{"error": ...}` ([BE-01](../alinhamento-e-debitos.md#be-01)).
+**`jwt_service.py`** — PyJWT, HS256 fixo ([BE-05](../alinhamento-e-debitos.md#be-05)); `JWT_SECRET_KEY` obrigatória (RuntimeError no import). Access 24h / refresh 30d. Convenção única de identidade: `sub` é gravado como str e lido como int (`get_user_id_from_payload`). Os 4 decorators + `_load_fresh_user` (frescor de privilégio: relê `tipo`/`ativo` a cada request; o token nunca eleva privilégio, o banco só revoga). Erros de auth respondem no envelope padrão `{"success": false, "message": ...}`.
 
 **`email_service.py`** — SMTP puro (`smtplib` + MIME), configurado por `SMTP_*`/`FROM_*`. Sem credenciais, loga e retorna `False` (não quebra o fluxo). `get_app_url()` resolve a base dos links por prioridade: `PRODUCTION_URL` → `APP_URL` → `network-config.json` → `http://localhost:5000`. Templates HTML inline para: confirmação de cadastro (24h), boas-vindas, reset de senha (`FRONTEND_URL/redefinir-senha/<token>`, 1h), código de exclusão de conta (6 dígitos, 30 min), notificação de status de pedido. Envio **síncrono** no caminho da requisição ([BE-09](../alinhamento-e-debitos.md#be-09)).
 
