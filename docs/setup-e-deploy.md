@@ -174,6 +174,20 @@ npx vitest run src/store/cartStore.test.js    # frontend
 
 Distribuído fora da Vercel, via `eas.json`. Configure `EXPO_PUBLIC_PRODUCTION_URL` para a API de produção — em build de produção, `getApiUrl()` usa essa URL.
 
+### Build e assinatura do mobile no CI
+
+O workflow `.github/workflows/mobile-build.yml` gera o APK Android nos PRs/pushes que tocam `mobile/`. Ele roda **`eas build` na nuvem do Expo** (não `--local`): o keystore de release fica gerenciado pelo Expo (`credentialsSource: remote`) e **nunca é baixado para o runner** — as credenciais de assinatura não passam pelos logs, que são públicos. O APK é baixado ao final pela URL do artifact (`eas build --json`).
+
+> ⚠️ **Keystore comprometido — rotação pendente.** Um build `--local` anterior expôs o keystore de release e suas senhas nos logs públicos do CI ([MB-09](./alinhamento-e-debitos.md#mb-09)). Até ser rotacionado, o keystore atual deve ser considerado **queimado**. Para rotacionar (ação do mantenedor):
+>
+> ```bash
+> cd mobile
+> eas login                     # ou defina EXPO_TOKEN no ambiente
+> eas credentials -p android    # Keystore → Delete your keystore → Set up a new keystore
+> ```
+>
+> A distribuição é `internal` (o app não está publicado na Play Store), então rotacionar **não quebra atualizações de loja** — apenas muda a assinatura dos APKs de teste, e quem testa precisa reinstalar.
+
 ## Segurança
 
 Há um script de verificação rápida em `security-tests/security-analyzer.py` que checa, contra um backend rodando localmente, itens como headers de segurança e respostas da API. Útil como smoke test antes de publicar.
