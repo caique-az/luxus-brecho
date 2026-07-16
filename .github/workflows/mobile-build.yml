@@ -8,6 +8,9 @@ on:
       - '.github/workflows/mobile-build.yml'
   pull_request:
     branches: [main, dev]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-build.yml'
   workflow_dispatch:
     inputs:
       build_type:
@@ -24,6 +27,12 @@ permissions:
 
 env:
   EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+# Cancela builds obsoletos do mesmo ref quando chega um novo push,
+# evitando consumir cota do EAS com builds que serão descartados.
+concurrency:
+  group: mobile-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
