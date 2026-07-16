@@ -57,7 +57,6 @@ Não há `config.py` — cada variável é lida inline no arquivo indicado ([BE-
 | Variável | Obrigatória? | Default | Onde é lida |
 |----------|--------------|---------|-------------|
 | `JWT_SECRET_KEY` | **sim** (app não sobe) | — | `services/jwt_service.py` |
-| `JWT_ALGORITHM` | não — **ignorada** (HS256 fixo, [BE-05](./alinhamento-e-debitos.md#be-05)) | — | ninguém |
 | `MONGODB_URI` | não (sem ela, rotas de banco respondem 503) | — | `app/__init__.py` |
 | `MONGODB_DATABASE` | não | database da URI | `app/__init__.py` |
 | `MONGO_SERVER_SELECTION_MS` ⚠️ | não | `15000` | `app/__init__.py` |

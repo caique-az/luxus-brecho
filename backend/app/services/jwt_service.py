@@ -25,6 +25,9 @@ if not JWT_SECRET_KEY:
         'JWT_SECRET_KEY não está definida. Defina a variável de ambiente '
         '(veja .env.example) antes de iniciar a aplicação.'
     )
+# Fixo por decisão: ler o algoritmo do ambiente exigiria uma allowlist para
+# barrar 'none' (que desliga a verificação de assinatura), e os demais HMAC não
+# trazem ganho — RS256 precisaria de par de chaves, não deste secret.
 JWT_ALGORITHM = 'HS256'
 JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)  # Token de acesso expira em 24h
 JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)  # Token de refresh expira em 30 dias
