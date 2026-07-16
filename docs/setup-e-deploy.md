@@ -52,34 +52,34 @@ Dois comportamentos de boot que valem destacar:
 
 ### Variáveis de ambiente do backend (`backend/.env`)
 
-Não há `config.py` — cada variável é lida inline no arquivo indicado ([BE-04](./alinhamento-e-debitos.md#be-04)). As marcadas com ⚠️ **não constam do `.env.example`** ([BE-03](./alinhamento-e-debitos.md#be-03)).
+Não há `config.py` — cada variável é lida inline no arquivo indicado ([BE-04](./alinhamento-e-debitos.md#be-04)). Todas constam do `.env.example`; as opcionais entram comentadas, com o default do código.
 
 | Variável | Obrigatória? | Default | Onde é lida |
 |----------|--------------|---------|-------------|
 | `JWT_SECRET_KEY` | **sim** (app não sobe) | — | `services/jwt_service.py` |
 | `MONGODB_URI` | não (sem ela, rotas de banco respondem 503) | — | `app/__init__.py` |
 | `MONGODB_DATABASE` | não | database da URI | `app/__init__.py` |
-| `MONGO_SERVER_SELECTION_MS` ⚠️ | não | `15000` | `app/__init__.py` |
-| `MONGO_CONNECT_TIMEOUT_MS` ⚠️ / `MONGO_SOCKET_TIMEOUT_MS` ⚠️ | não | `20000` | `app/__init__.py` |
-| `MONGO_MAX_POOL_SIZE` ⚠️ | não | `50` | `app/__init__.py` |
-| `MONGO_APPNAME` ⚠️ | não | `Luxus-Brecho-Backend` | `app/__init__.py` |
-| `SECRET_KEY` ⚠️ | não | `dev-secret-key` | `app/__init__.py` |
-| `MAX_CONTENT_LENGTH` ⚠️ | não | `16777216` (16MB) | `app/__init__.py` |
+| `MONGO_SERVER_SELECTION_MS` | não | `15000` | `app/__init__.py` |
+| `MONGO_CONNECT_TIMEOUT_MS` / `MONGO_SOCKET_TIMEOUT_MS` | não | `20000` | `app/__init__.py` |
+| `MONGO_MAX_POOL_SIZE` | não | `50` | `app/__init__.py` |
+| `MONGO_APPNAME` | não | `Luxus-Brecho-Backend` | `app/__init__.py` |
+| `SECRET_KEY` | não | `dev-secret-key` | `app/__init__.py` |
+| `MAX_CONTENT_LENGTH` | não | `16777216` (16MB) | `app/__init__.py` |
 | `FLASK_DEBUG` | não | `False` | `app/__init__.py`, health |
-| `FLASK_ENV` ⚠️ | não | `production` | `routes/health_routes.py` |
-| `FLASK_HOST` ⚠️ / `FLASK_PORT` ⚠️ | não | `0.0.0.0` / `5000` | `run.py` (se não houver `network-config.json`) |
+| `FLASK_ENV` | não | `production` | `routes/health_routes.py` |
+| `FLASK_HOST` / `FLASK_PORT` | não | `0.0.0.0` / `5000` | `run.py` (se não houver `network-config.json`) |
 | `FRONTEND_ORIGIN` | não | lista embutida (localhost + Vercel) | `app/__init__.py` (CORS, CSV) |
 | `RATELIMIT_STORAGE_URI` | não | `memory://` (warning em produção) | `app/__init__.py` |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | para o seed do 1º admin | — (sem elas, sem seed) | `models/user_model.py` |
 | `ADMIN_NAME` | não | `Administrador` | `models/user_model.py` |
 | `SUPABASE_URL` / `SUPABASE_KEY` | para upload de imagens | — (serviço fica indisponível) | `services/supabase_storage.py` |
 | `SUPABASE_BUCKET` | não | `product-images` | `services/supabase_storage.py` |
-| `SUPABASE_SERVICE_ROLE_EMAIL` ⚠️ / `SUPABASE_SERVICE_ROLE_KEY` ⚠️ | não (retry de RLS) | — | `services/supabase_storage.py` |
+| `SUPABASE_SERVICE_ROLE_EMAIL` / `SUPABASE_SERVICE_ROLE_KEY` | não (retry de RLS) | — | `services/supabase_storage.py` |
 | `SMTP_HOST` / `SMTP_PORT` | não | `smtp.gmail.com` / `587` | `services/email_service.py` |
 | `SMTP_USER` / `SMTP_PASSWORD` | para envio de e-mails | — (sem elas, e-mails só logam) | `services/email_service.py` |
 | `FROM_EMAIL` / `FROM_NAME` | não | `SMTP_USER` / `Luxus Brechó` | `services/email_service.py` |
 | `FRONTEND_URL` | para links de reset de senha | `http://localhost:5173` | `services/email_service.py` |
-| `PRODUCTION_URL` ⚠️ / `APP_URL` ⚠️ | não (base dos links de e-mail em produção) | fallback: `network-config.json` → localhost | `services/email_service.py` |
+| `PRODUCTION_URL` / `APP_URL` | não (base dos links de e-mail em produção) | fallback: `network-config.json` → localhost | `services/email_service.py` |
 
 Notas:
 - Sem `MONGODB_URI` o servidor **ainda sobe**, mas rotas que dependem do banco respondem `503` (decorator `@require_db`).
