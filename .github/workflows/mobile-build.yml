@@ -74,18 +74,25 @@ jobs:
         run: |
           cd mobile
           BUILD_TYPE="${{ github.event.inputs.build_type || 'preview' }}"
-          echo "📱 Iniciando build com profile: $BUILD_TYPE"
-          
-          eas build --platform android --profile $BUILD_TYPE --local --non-interactive --output ../app.apk
-          
-          if [ $? -eq 0 ]; then
-            echo "build_status=success" >> $GITHUB_OUTPUT
-            echo "✅ Build concluído com sucesso!"
-          else
-            echo "build_status=failure" >> $GITHUB_OUTPUT
-            echo "❌ Build falhou!"
+          echo "📱 Iniciando build EAS (cloud) com profile: $BUILD_TYPE"
+
+          # Build na nuvem do Expo (sem --local): o keystore de assinatura
+          # permanece nos servidores do Expo e nunca é baixado para o runner,
+          # evitando o vazamento das credenciais nos logs em caso de falha.
+          eas build --platform android --profile "$BUILD_TYPE" \
+            --non-interactive --wait --json > "$RUNNER_TEMP/build.json"
+
+          APK_URL=$(jq -r '.[0].artifacts.buildUrl // .[0].artifacts.applicationArchiveUrl // empty' "$RUNNER_TEMP/build.json")
+          if [ -z "$APK_URL" ]; then
+            echo "❌ Não foi possível obter a URL do artifact do build:"
+            cat "$RUNNER_TEMP/build.json"
             exit 1
           fi
+
+          echo "⬇️  Baixando APK gerado na nuvem..."
+          curl -fSL -o ../app.apk "$APK_URL"
+          echo "build_status=success" >> $GITHUB_OUTPUT
+          echo "✅ Build concluído e APK baixado!"
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
