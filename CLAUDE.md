@@ -106,7 +106,8 @@ JWT via header `Authorization: Bearer <token>`, com access + refresh token. A id
 
 ### Mobile — Expo Router + camada de config de rede
 - **`app/`** — roteamento por arquivos do Expo Router. `(tabs)/` é o grupo de abas; rotas dinâmicas como `product/[id].tsx`; `admin/` para telas de gestão.
-- **`constants/config.ts`** — objeto `CONFIG` central, todo configurável por env vars `EXPO_PUBLIC_*`. `getApiUrl()` decide a URL: em produção usa `PRODUCTION_URL`, em dev usa `NETWORK_URL`.
+- **`constants/config.ts`** — objeto `CONFIG` central (timeouts, cache, frete). **As env vars `EXPO_PUBLIC_*` dele não funcionam** ([MB-09](./docs/alinhamento-e-debitos.md#mb-09)): os helpers leem `process.env[key]` dinâmico e o Metro só inlina acesso por ponto, então tudo cai no fallback. Não confie no `.env` do mobile até isso ser corrigido.
+- **`utils/networkUtils.ts`** — `getApiUrl()` decide a URL: em produção usa `PRODUCTION_URL`, em dev usa `NETWORK_URL`. É a única — existia uma cópia em `config.ts` que ninguém importava (MB-06).
 - **`services/api.ts`** — `ApiService` com timeout, retry/backoff e cache local (AsyncStorage via `cacheManager`) para GETs.
 - **`schemas/`** — validação Zod; `hooks/useZodForm.ts` integra com react-hook-form.
 
@@ -128,9 +129,9 @@ Tabela canônica em [docs/setup-e-deploy.md](./docs/setup-e-deploy.md). Resumo:
 
 - **Backend** (`backend/.env`, ver `.env.example`): `JWT_SECRET_KEY` (**obrigatória** — sem ela o app não sobe), `MONGODB_URI`, `MONGODB_DATABASE`, `FLASK_DEBUG`, `FRONTEND_ORIGIN` (lista CSV de origens CORS), `ADMIN_EMAIL`/`ADMIN_PASSWORD` (semeiam o 1º admin; sem elas, nenhum admin é criado), `SUPABASE_URL`/`SUPABASE_KEY`/`SUPABASE_BUCKET`, e bloco `SMTP_*` para emails. Nomes e defaults vivem em `app/config.py`.
 - **Frontend**: `VITE_API_URL`.
-- **Mobile**: prefixo `EXPO_PUBLIC_*` (ex.: `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_PRODUCTION_URL`).
+- **Mobile**: prefixo `EXPO_PUBLIC_*` (ex.: `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_PRODUCTION_URL`) — **hoje sem efeito**, ver MB-09.
 
-Os prefixos importam: sem `VITE_*` / `EXPO_PUBLIC_*` a variável não é embarcada no bundle.
+Os prefixos importam: sem `VITE_*` / `EXPO_PUBLIC_*` a variável não é embarcada no bundle. E, no Expo, o prefixo não basta — o acesso precisa ser estático (`process.env.EXPO_PUBLIC_X`, literal), porque o inline é feito por regex sobre o texto do código.
 
 ## CI
 

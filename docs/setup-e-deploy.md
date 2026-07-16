@@ -118,7 +118,9 @@ EXPO_PUBLIC_API_URL=http://SEU_IP:5000/api
 EXPO_PUBLIC_PRODUCTION_URL=https://sua-api-producao/api
 EXPO_PUBLIC_ENABLE_LOGS=true
 ```
-Toda configuração do app vive em `constants/config.ts` e pode ser sobrescrita por variáveis `EXPO_PUBLIC_*` (timeouts, retries, cache, frete, paginação).
+Toda configuração do app vive em `constants/config.ts` (timeouts, retries, cache, frete, paginação).
+
+> ⚠️ **As variáveis `EXPO_PUBLIC_*` acima não têm efeito hoje** ([MB-09](./alinhamento-e-debitos.md#mb-09)): o `config.ts` lê `process.env[key]` dinamicamente e o Metro só inlina acesso por ponto, então todas caem no fallback. Em dev o fallback vem do `network-config.json`; em produção, do valor embutido no próprio `config.ts`. Para mudar a URL da API, edite essas fontes — o `.env` não será lido.
 
 ## Configuração de rede para o mobile (passo crítico)
 
