@@ -20,7 +20,7 @@ Antes de mexer em algo não trivial, consulte:
 
 | Documento | Quando |
 |-----------|--------|
-| [docs/alinhamento-e-debitos.md](./docs/alinhamento-e-debitos.md) | **Leia sempre antes de "consertar" uma inconsistência** — matriz Backend×Web×Mobile e todos os débitos com ID (`BE-*`, `FE-*`, `MB-*`). Muita divergência é conhecida e deliberada. |
+| [docs/alinhamento-e-debitos.md](./docs/alinhamento-e-debitos.md) | **Leia sempre antes de "consertar" uma inconsistência** — matriz Backend×Web×Mobile e todos os débitos com ID (`BE-*`, `FE-*`, `MB-*`, `CI-*`, `DOC-*`). Muita divergência é conhecida e deliberada. |
 | [docs/convencoes.md](./docs/convencoes.md) | Padrões de código, API, auth, testes, Git e documentação |
 | [docs/api-reference.md](./docs/api-reference.md) + `docs/api/` | Contrato da API (um doc por blueprint) |
 | [docs/arquitetura.md](./docs/arquitetura.md) | Camadas, modelo de dados, boot |
@@ -139,7 +139,9 @@ Dois workflows em `.github/workflows/`:
 - **`security-tests.yml`** — sobe MongoDB + backend e roda `security-tests/security-analyzer.py` contra a API viva. Dispara em push/PR (main, dev) e diariamente às 02:00.
 - **`mobile-build.yml`** — build local do APK via EAS. Dispara em **todo PR para main/dev sem filtro de `paths`**, então mesmo um PR que só toca o backend espera o build do app.
 
-Ambos enviam email por SMTP e dependem de secrets (`EXPO_TOKEN`, `SMTP_*`). Não há CI rodando `pytest` nem `vitest` — rode os testes localmente antes do PR.
+Ambos enviam email por SMTP e dependem de secrets (`EXPO_TOKEN`, `SMTP_*`).
+
+**Nenhum workflow roda a suíte** ([CI-01](./docs/alinhamento-e-debitos.md#ci-01)) — rode os testes localmente antes do PR, o CI não vai pegar. Outras ferramentas configuradas mas quebradas, todas com ID: typecheck do mobile ([CI-03](./docs/alinhamento-e-debitos.md#ci-03)), lint do frontend ([CI-04](./docs/alinhamento-e-debitos.md#ci-04)) e os 90 erros represados do lint do mobile ([MB-10](./docs/alinhamento-e-debitos.md#mb-10)). Não presuma que um comando de qualidade funciona só porque existe no `package.json`.
 
 ## Idioma e convenções de código
 

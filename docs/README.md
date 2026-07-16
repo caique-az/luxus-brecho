@@ -28,7 +28,7 @@ Esta documentação descreve o **estado atual do código** — incluindo diverg�
 | [apps/backend.md](./apps/backend.md) | Backend por dentro: utils, services, entrypoints, testes e limitações |
 | [apps/frontend.md](./apps/frontend.md) | Frontend web: rotas, stores Zustand, interceptors do axios, testes |
 | [apps/mobile.md](./apps/mobile.md) | Mobile: estado real (JWT, favoritos, carrinho, checkout) |
-| [alinhamento-e-debitos.md](./alinhamento-e-debitos.md) | **Doc vivo** — matriz de alinhamento Backend×Web×Mobile e todos os débitos conhecidos, com ID |
+| [alinhamento-e-debitos.md](./alinhamento-e-debitos.md) | **Doc vivo** — matriz de alinhamento Backend×Web×Mobile e todos os débitos conhecidos, com ID (`BE-*`, `FE-*`, `MB-*`, `CI-*`, `DOC-*`) |
 | [setup-e-deploy.md](./setup-e-deploy.md) | Subir os 3 apps, **tabela canônica de env vars**, rede do mobile e publicação (Vercel/Expo) |
 | [convencoes.md](./convencoes.md) | Padrões de código, API, auth, testes, Git e **convenções de documentação** |
 | [workflow-commits.md](./workflow-commits.md) | Rodar a suíte de testes antes de cada commit e padrão Conventional Commits |
