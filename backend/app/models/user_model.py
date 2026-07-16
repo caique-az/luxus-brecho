@@ -8,15 +8,15 @@ Modelo e utilidades para a coleção de usuários.
 """
 from typing import Dict, Any, Tuple, Optional
 from pymongo import ASCENDING, TEXT
-from pymongo.collection import ReturnDocument
 import bcrypt
 import os
 import re
 import secrets
 from datetime import datetime, timedelta
 
+from app.utils.counters import next_sequence
+
 COLLECTION_NAME = "users"
-COUNTERS_COLLECTION = "counters"
 COUNTER_KEY_USERS = "users"
 
 # Tipos de usuário permitidos
@@ -148,14 +148,7 @@ def get_collection(db):
 
 def get_next_id(db) -> int:
     """Gera próximo ID sequencial para usuário."""
-    counters = db[COUNTERS_COLLECTION]
-    result = counters.find_one_and_update(
-        {"name": COUNTER_KEY_USERS},
-        {"$inc": {"seq": 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER
-    )
-    return result["seq"]
+    return next_sequence(db, COUNTER_KEY_USERS)
 
 def validate_user_payload(payload: Dict[str, Any], is_update: bool = False) -> Tuple[bool, str]:
     """
