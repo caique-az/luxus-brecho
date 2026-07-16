@@ -8,7 +8,7 @@ from marshmallow import Schema, fields, ValidationError
 import time
 from functools import wraps
 
-from ..services.jwt_service import jwt_optional, admin_required
+from ..services.jwt_service import admin_required
 from ..utils.responses import ok, err
 
 class ProductQuerySchema(Schema):

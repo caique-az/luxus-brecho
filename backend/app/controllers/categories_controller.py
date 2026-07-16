@@ -168,24 +168,6 @@ def delete_category(id: int):
 
 
 @require_db
-def deactivate_category(id: int):
-    """Desativa uma categoria (soft delete)."""
-    db = current_app.db
-    coll = get_collection(db)
-
-    category = coll.find_one({"id": int(id)})
-    if not category:
-        return err("categoria não encontrada", 404)
-
-    if not category.get("active", True):
-        return err("categoria já está desativada")
-
-    coll.update_one({"id": int(id)}, {"$set": {"active": False}})
-    _invalidate_categories_cache()  # Invalida cache após desativar
-    return ok(message="categoria desativada com sucesso")
-
-
-@require_db
 def activate_category(id: int):
     """Reativa uma categoria inativa."""
     db = current_app.db
