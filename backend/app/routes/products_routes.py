@@ -10,6 +10,7 @@ from functools import wraps
 
 from ..services.jwt_service import admin_required
 from ..utils.responses import ok, err
+from ..utils.pagination import parse_pagination
 
 class ProductQuerySchema(Schema):
     page = fields.Integer(load_default=1, validate=lambda x: 1 <= x <= 1000)
@@ -350,15 +351,14 @@ def get_products_by_category(categoria: str):
 
     coll = get_collection(db)
 
-    page = max(int(request.args.get("page", 1) or 1), 1)
-    page_size = min(max(int(request.args.get("page_size", 20) or 20), 1), 100)
+    page, page_size, skip = parse_pagination(default_page_size=20)
 
     query = {"categoria": categoria}
     cursor = coll.find(query).sort("titulo", 1)
     total = coll.count_documents(query)
 
     items = [
-        _serialize(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
+        _serialize(doc) for doc in cursor.skip(skip).limit(page_size)
     ]
 
     if not items:

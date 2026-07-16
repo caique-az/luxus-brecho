@@ -12,6 +12,7 @@ from ..models.category_model import (
 )
 from ..utils.serialization import serialize_doc as _serialize
 from ..utils.responses import ok, err
+from ..utils.pagination import parse_pagination
 
 
 def _invalidate_categories_cache():
@@ -32,8 +33,7 @@ def list_categories():
 
     # Filtro por status ativo
     active_only = request.args.get("active_only", "false").lower() == "true"
-    page = max(int(request.args.get("page", 1) or 1), 1)
-    page_size = min(max(int(request.args.get("page_size", 10) or 10), 1), 100)
+    page, page_size, skip = parse_pagination(default_page_size=10)
 
     query: Dict[str, Any] = {}
     if active_only:
@@ -43,7 +43,7 @@ def list_categories():
     total = coll.count_documents(query)
 
     items = [
-        _serialize(doc) for doc in cursor.skip((page - 1) * page_size).limit(page_size)
+        _serialize(doc) for doc in cursor.skip(skip).limit(page_size)
     ]
 
     return ok(
