@@ -67,6 +67,7 @@ Estado de cada tema em relação ao **contrato do backend** (fonte de verdade). 
 | <a id="mb-01"></a>MB-01 | **Mobile passou a usar JWT real**: armazena access/refresh no AsyncStorage, injeta `Authorization: Bearer` (`getAuthHeaders`) e renova em 401. | 2026-07-07 | `e347454` |
 | <a id="fe-02"></a>FE-02 | **Exclusão de conta no web** passou a enviar `Authorization: Bearer` em `requestAccountDeletion`/`confirmAccountDeletion`. | 2026-07-07 | `24372a6` |
 | <a id="mb-03"></a>MB-03 | **Exclusão de conta no app** passou a enviar `Authorization: Bearer` (via `getAuthHeaders`). | 2026-07-07 | `24372a6` |
+| <a id="mb-08"></a>MB-08 | **Build Android quebrado por `react-native-worklets` órfão**: `react-native-worklets@0.5.1` (exige RN ≥ 0.78) sobrou da atualização para o SDK54 (`c979ccc`) depois que `expo`/`react-native`/`reanimated` foram revertidos ao SDK49. O Gradle reprovava em `:react-native-worklets:assertMinimalReactNativeVersionTask` contra RN 0.72.10, deixando todo PR com o check "Build Android APK" vermelho. Removida a dependência direta (não importada em lugar nenhum — o Reanimated 3.x já embute os worklets). | 2026-07-16 | `a8f10e0` |
 
 ---
 
