@@ -52,7 +52,9 @@ Dois comportamentos de boot que valem destacar:
 
 ### Variáveis de ambiente do backend (`backend/.env`)
 
-Não há `config.py` — cada variável é lida inline no arquivo indicado ([BE-04](./alinhamento-e-debitos.md#be-04)). Todas constam do `.env.example`; as opcionais entram comentadas, com o default do código.
+Toda variável é lida por uma função de `app/config.py` — é lá que vivem nome, default e parsing. A coluna "Onde é lida" abaixo indica quem **consome** o valor. Todas constam do `.env.example`; as opcionais entram comentadas, com o default do código.
+
+Um valor inválido num campo numérico (ex.: `MONGO_MAX_POOL_SIZE=abc`) **avisa e usa o default**, em vez de derrubar a conexão.
 
 | Variável | Obrigatória? | Default | Onde é lida |
 |----------|--------------|---------|-------------|

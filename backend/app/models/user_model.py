@@ -9,11 +9,11 @@ Modelo e utilidades para a coleção de usuários.
 from typing import Dict, Any, Tuple, Optional
 from pymongo import ASCENDING, TEXT
 import bcrypt
-import os
 import re
 import secrets
 from datetime import datetime, timedelta
 
+from app import config
 from app.utils.counters import next_sequence
 
 COLLECTION_NAME = "users"
@@ -356,8 +356,7 @@ def create_default_admin(db):
         if collection.find_one({"tipo": "Administrador"}):
             return
 
-        admin_email = os.environ.get("ADMIN_EMAIL")
-        admin_password = os.environ.get("ADMIN_PASSWORD")
+        admin_email, admin_password, admin_name = config.admin_seed()
         if not admin_email or not admin_password:
             print(
                 "ℹ️  ADMIN_EMAIL/ADMIN_PASSWORD não definidos — administrador "
@@ -366,7 +365,7 @@ def create_default_admin(db):
             return
 
         admin_data = {
-            "nome": os.environ.get("ADMIN_NAME", "Administrador"),
+            "nome": admin_name,
             "email": admin_email,
             "senha": admin_password,
             "tipo": "Administrador",

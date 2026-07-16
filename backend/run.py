@@ -2,10 +2,9 @@
 Script principal para executar o servidor Flask
 """
 
-import os
 import json
 from pathlib import Path
-from app import create_app
+from app import create_app, config
 from flask_cors import CORS
 
 def load_network_config():
@@ -46,13 +45,13 @@ def main():
         print("🌐 Usando configurações de network-config.json")
     else:
         # Fallback para variáveis de ambiente
-        host = os.environ.get('FLASK_HOST', '0.0.0.0')
-        port = int(os.environ.get('FLASK_PORT', 5000))
+        host = config.flask_host()
+        port = config.flask_port()
         current_ip = None
-        
+
         print("⚙️  Usando variáveis de ambiente")
-    
-    debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+
+    debug = config.debug_mode()
     
     print("🚀 " + "="*50)
     print(f"🚀 Iniciando servidor Flask...")

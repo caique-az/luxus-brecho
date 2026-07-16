@@ -2,7 +2,6 @@
 Serviço para integração com Supabase Storage
 Gerencia upload, download e exclusão de imagens de produtos
 """
-import os
 import uuid
 import mimetypes
 from io import BytesIO
@@ -10,14 +9,16 @@ from typing import Optional, Tuple, List
 from PIL import Image
 from supabase import create_client, Client
 from supabase.client import ClientOptions
+
+from app import config
 from werkzeug.datastructures import FileStorage
 
 class SupabaseStorageService:
     def __init__(self):
         """Inicializa o cliente Supabase com tratamento de erros"""
-        self.supabase_url = os.getenv("SUPABASE_URL")
-        self.supabase_key = os.getenv("SUPABASE_KEY") 
-        self.bucket_name = os.getenv("SUPABASE_BUCKET", "product-images")
+        self.supabase_url = config.supabase_url()
+        self.supabase_key = config.supabase_key()
+        self.bucket_name = config.supabase_bucket()
         
         # Estado da conexão
         self.client: Optional[Client] = None
@@ -214,9 +215,10 @@ class SupabaseStorageService:
                     error_msg = result.error.message if hasattr(result.error, 'message') else str(result.error)
                     if 'violates row-level security policy' in str(error_msg).lower():
                         # Tenta obter novo token e repetir upload
+                        service_email, service_password = config.supabase_service_role()
                         self.client.auth.sign_in_with_password({
-                            'email': os.getenv('SUPABASE_SERVICE_ROLE_EMAIL'),
-                            'password': os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+                            'email': service_email,
+                            'password': service_password
                         })
                         # Tenta upload novamente
                         result = self.client.storage.from_(self.bucket_name).upload(

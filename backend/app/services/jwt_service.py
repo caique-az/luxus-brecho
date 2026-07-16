@@ -3,7 +3,6 @@ Serviço de autenticação JWT.
 Gerencia criação, validação e refresh de tokens.
 """
 from __future__ import annotations
-import os
 import jwt
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, Tuple
@@ -14,17 +13,13 @@ from flask import request, g, current_app
 # tests/test_jwt_service.py via spec_from_file_location, contexto em que um
 # ``from ..utils...`` não tem pacote pai e falharia.
 from app.utils.responses import err
+from app.config import require_jwt_secret_key
 
 
 # Configurações JWT
-# Sem fallback: um segredo hardcoded no repositório tornaria os tokens de admin
-# forjáveis. Falha rápido no startup se a variável de ambiente não estiver definida.
-JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY')
-if not JWT_SECRET_KEY:
-    raise RuntimeError(
-        'JWT_SECRET_KEY não está definida. Defina a variável de ambiente '
-        '(veja .env.example) antes de iniciar a aplicação.'
-    )
+# Continua sendo lido no import (e não sob demanda) de propósito: sem o segredo o
+# app deve falhar no startup, não na primeira requisição autenticada.
+JWT_SECRET_KEY = require_jwt_secret_key()
 # Fixo por decisão: ler o algoritmo do ambiente exigiria uma allowlist para
 # barrar 'none' (que desliga a verificação de assinatura), e os demais HMAC não
 # trazem ganho — RS256 precisaria de par de chaves, não deste secret.

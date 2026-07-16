@@ -3,20 +3,13 @@ Serviço para envio de emails.
 Utiliza SMTP para enviar emails de confirmação e outros.
 """
 import smtplib
-import os
 import json
 from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
 
-# Configurações de email (devem ser definidas nas variáveis de ambiente)
-SMTP_HOST = os.getenv('SMTP_HOST', 'smtp.gmail.com')
-SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
-SMTP_USER = os.getenv('SMTP_USER', '')
-SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
-FROM_EMAIL = os.getenv('FROM_EMAIL', SMTP_USER)
-FROM_NAME = os.getenv('FROM_NAME', 'Luxus Brechó')
+from app import config
 
 
 def get_app_url() -> str:
@@ -29,13 +22,13 @@ def get_app_url() -> str:
     4. Fallback final para localhost:5000
     """
     # 1. Verifica se há URL de produção configurada
-    production_url = os.getenv('PRODUCTION_URL', '').strip()
+    production_url = config.production_url()
     if production_url:
         print(f"📧 Email Service usando PRODUCTION_URL: {production_url}")
         return production_url
     
     # 2. Verifica variável APP_URL customizada
-    app_url_env = os.getenv('APP_URL', '').strip()
+    app_url_env = config.app_url()
     if app_url_env:
         print(f"📧 Email Service usando APP_URL do .env: {app_url_env}")
         return app_url_env
@@ -46,8 +39,8 @@ def get_app_url() -> str:
         
         if config_path.exists():
             with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                backend_config = config.get('backend', {})
+                network_config = json.load(f)
+                backend_config = network_config.get('backend', {})
                 current_ip = backend_config.get('current_ip')
                 port = backend_config.get('port', 5000)
                 
@@ -81,17 +74,20 @@ def send_email(to_email: str, subject: str, html_content: str, text_content: Opt
     Returns:
         True se email foi enviado com sucesso, False caso contrário
     """
+    smtp_user = config.smtp_user()
+    smtp_password = config.smtp_password()
+
     # Verifica se as configurações de email estão definidas
-    if not SMTP_USER or not SMTP_PASSWORD:
+    if not smtp_user or not smtp_password:
         print("⚠️  Configurações de email não definidas. Email não será enviado.")
         print(f"   Para: {to_email}")
         print(f"   Assunto: {subject}")
         return False
-    
+
     try:
         # Cria mensagem
         message = MIMEMultipart('alternative')
-        message['From'] = f'{FROM_NAME} <{FROM_EMAIL}>'
+        message['From'] = f'{config.from_name()} <{config.from_email()}>'
         message['To'] = to_email
         message['Subject'] = subject
         
@@ -105,9 +101,9 @@ def send_email(to_email: str, subject: str, html_content: str, text_content: Opt
         message.attach(part2)
         
         # Conecta ao servidor SMTP e envia
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(config.smtp_host(), config.smtp_port()) as server:
             server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.login(smtp_user, smtp_password)
             server.send_message(message)
         
         print(f"✅ Email enviado com sucesso para {to_email}")
@@ -309,7 +305,7 @@ def send_password_reset_email(to_email: str, nome: str, token: str) -> bool:
         True se email foi enviado com sucesso
     """
     # Usa variável de ambiente para URL do frontend
-    frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+    frontend_url = config.frontend_url()
     reset_url = f"{frontend_url}/redefinir-senha/{token}"
     subject = "Recuperação de Senha - Luxus Brechó"
     
