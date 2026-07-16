@@ -13,7 +13,9 @@ module.exports = defineConfig([
       // TypeScript specific rules
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': 'error',
-      '@typescript-eslint/prefer-const': 'error',
+      // prefer-const é regra do core (declarada abaixo). Não existe no plugin
+      // @typescript-eslint — declará-la aqui derrubava o eslint inteiro com
+      // "Could not find prefer-const in plugin", e nenhum lint rodava.
       '@typescript-eslint/no-non-null-assertion': 'warn',
       
       // React specific rules
