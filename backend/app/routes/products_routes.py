@@ -5,7 +5,6 @@ from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 from typing import Any, Dict
 from marshmallow import Schema, fields, ValidationError
-import time
 from functools import wraps
 
 from ..services.jwt_service import admin_required
@@ -19,7 +18,9 @@ class ProductQuerySchema(Schema):
     q = fields.String(load_default=None, allow_none=True, validate=lambda x: len(x) <= 100 if x else True)
 
 from ..models.product_model import (
+    COUNTER_KEY_PRODUCTS,
     get_collection,
+    get_next_sequence,
     prepare_new_product,
     validate_product,
     normalize_product,
@@ -244,16 +245,25 @@ def create_product_with_image():
         except (ValueError, TypeError):
             return err("Preço deve ser um número válido")
 
-        # First upload image to get URL
-        # Use temporary ID for upload
-        temp_id = int(time.time() * 1000)  # Timestamp as temporary ID
-        success, result = storage_service.upload_image(file, temp_id)
+        # Reserva o id antes do upload para subir o arquivo uma vez só, já com o
+        # nome final. Antes o upload usava um timestamp como id temporário e, como
+        # ele nunca coincidia com o id sequencial, todo produto pagava dois uploads
+        # e um delete. Um id queimado por validação que falha depois é só um buraco
+        # na sequência, sem efeito para o cliente.
+        try:
+            product_id = get_next_sequence(db, COUNTER_KEY_PRODUCTS)
+        except Exception as e:
+            current_app.logger.error(f"Falha ao gerar id do produto: {e}")
+            return err("Erro interno no servidor", 500)
+
+        success, result = storage_service.upload_image(file, product_id)
 
         if not success:
             return err(f"Erro no upload da imagem: {result}")
 
         # Add image URL to product data
         form_data['imagem'] = result
+        form_data['id'] = product_id
 
         # Now prepare product with all data (including image)
         coll = get_collection(db)
@@ -262,18 +272,6 @@ def create_product_with_image():
             # If validation fails, remove already uploaded image
             storage_service.delete_image(result)
             return err("erro de validação", 400, errors=errors)
-
-        # Rename file to use real product ID
-        product_id = product_doc['id']
-        if temp_id != product_id:
-            # Upload again with correct ID
-            file.stream.seek(0)  # Reset file stream
-            success_final, final_url = storage_service.upload_image(file, product_id)
-            if success_final:
-                # Remove temporary file and use new URL
-                storage_service.delete_image(result)
-                product_doc['imagem'] = final_url
-            # If re-upload fails, keep temporary but it still works
 
         # Insert product into database
         try:
