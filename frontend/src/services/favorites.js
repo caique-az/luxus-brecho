@@ -2,33 +2,12 @@ import api from './api';
 
 /**
  * Service para gerenciar favoritos via API.
- * Todas as requisições incluem o X-User-Id do usuário logado.
+ *
+ * A identidade do usuário vai no Bearer token, injetado pelo interceptor de
+ * `api.js` — como nos demais services. O header `X-User-Id` que este arquivo
+ * montava à mão era do esquema antigo, removido do backend por ser falsificável
+ * (as rotas de favoritos são `@jwt_required` e leem `g.user_id`).
  */
-
-// Função auxiliar para obter user_id
-const getUserId = () => {
-  try {
-    const userStr = localStorage.getItem('luxus_user');
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      return user.id || user._id;
-    }
-  } catch (error) {
-    console.error('Erro ao obter user_id:', error);
-  }
-  return null;
-};
-
-// Função auxiliar para adicionar header X-User-Id
-const getHeaders = () => {
-  const userId = getUserId();
-  if (!userId) {
-    throw new Error('Usuário não autenticado');
-  }
-  return {
-    'X-User-Id': userId
-  };
-};
 
 export const favoritesService = {
   /**
@@ -37,9 +16,7 @@ export const favoritesService = {
    */
   async getFavorites() {
     try {
-      const response = await api.get('/favorites', {
-        headers: getHeaders()
-      });
+      const response = await api.get('/favorites');
       return {
         success: true,
         favorites: response.data.favorites || [],
@@ -63,11 +40,7 @@ export const favoritesService = {
    */
   async addFavorite(productId) {
     try {
-      const response = await api.post(
-        '/favorites',
-        { product_id: productId },
-        { headers: getHeaders() }
-      );
+      const response = await api.post('/favorites', { product_id: productId });
       return {
         success: true,
         message: response.data.message,
@@ -91,9 +64,7 @@ export const favoritesService = {
    */
   async removeFavorite(productId) {
     try {
-      const response = await api.delete(`/favorites/${productId}`, {
-        headers: getHeaders()
-      });
+      const response = await api.delete(`/favorites/${productId}`);
       return {
         success: true,
         message: response.data.message
@@ -114,9 +85,7 @@ export const favoritesService = {
    */
   async isFavorited(productId) {
     try {
-      const response = await api.get(`/favorites/check/${productId}`, {
-        headers: getHeaders()
-      });
+      const response = await api.get(`/favorites/check/${productId}`);
       return response.data.is_favorited || false;
     } catch (error) {
       console.error('Erro ao verificar favorito:', error);
@@ -131,11 +100,7 @@ export const favoritesService = {
    */
   async toggleFavorite(productId) {
     try {
-      const response = await api.post(
-        '/favorites/toggle',
-        { product_id: productId },
-        { headers: getHeaders() }
-      );
+      const response = await api.post('/favorites/toggle', { product_id: productId });
       return {
         success: true,
         message: response.data.message,

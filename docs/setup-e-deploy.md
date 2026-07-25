@@ -52,35 +52,36 @@ Dois comportamentos de boot que valem destacar:
 
 ### Variáveis de ambiente do backend (`backend/.env`)
 
-Não há `config.py` — cada variável é lida inline no arquivo indicado ([BE-04](./alinhamento-e-debitos.md#be-04)). As marcadas com ⚠️ **não constam do `.env.example`** ([BE-03](./alinhamento-e-debitos.md#be-03)).
+Toda variável é lida por uma função de `app/config.py` — é lá que vivem nome, default e parsing. A coluna "Onde é lida" abaixo indica quem **consome** o valor. Todas constam do `.env.example`; as opcionais entram comentadas, com o default do código.
+
+Um valor inválido num campo numérico (ex.: `MONGO_MAX_POOL_SIZE=abc`) **avisa e usa o default**, em vez de derrubar a conexão.
 
 | Variável | Obrigatória? | Default | Onde é lida |
 |----------|--------------|---------|-------------|
 | `JWT_SECRET_KEY` | **sim** (app não sobe) | — | `services/jwt_service.py` |
-| `JWT_ALGORITHM` | não — **ignorada** (HS256 fixo, [BE-05](./alinhamento-e-debitos.md#be-05)) | — | ninguém |
 | `MONGODB_URI` | não (sem ela, rotas de banco respondem 503) | — | `app/__init__.py` |
 | `MONGODB_DATABASE` | não | database da URI | `app/__init__.py` |
-| `MONGO_SERVER_SELECTION_MS` ⚠️ | não | `15000` | `app/__init__.py` |
-| `MONGO_CONNECT_TIMEOUT_MS` ⚠️ / `MONGO_SOCKET_TIMEOUT_MS` ⚠️ | não | `20000` | `app/__init__.py` |
-| `MONGO_MAX_POOL_SIZE` ⚠️ | não | `50` | `app/__init__.py` |
-| `MONGO_APPNAME` ⚠️ | não | `Luxus-Brecho-Backend` | `app/__init__.py` |
-| `SECRET_KEY` ⚠️ | não | `dev-secret-key` | `app/__init__.py` |
-| `MAX_CONTENT_LENGTH` ⚠️ | não | `16777216` (16MB) | `app/__init__.py` |
+| `MONGO_SERVER_SELECTION_MS` | não | `15000` | `app/__init__.py` |
+| `MONGO_CONNECT_TIMEOUT_MS` / `MONGO_SOCKET_TIMEOUT_MS` | não | `20000` | `app/__init__.py` |
+| `MONGO_MAX_POOL_SIZE` | não | `50` | `app/__init__.py` |
+| `MONGO_APPNAME` | não | `Luxus-Brecho-Backend` | `app/__init__.py` |
+| `SECRET_KEY` | não | `dev-secret-key` | `app/__init__.py` |
+| `MAX_CONTENT_LENGTH` | não | `16777216` (16MB) | `app/__init__.py` |
 | `FLASK_DEBUG` | não | `False` | `app/__init__.py`, health |
-| `FLASK_ENV` ⚠️ | não | `production` | `routes/health_routes.py` |
-| `FLASK_HOST` ⚠️ / `FLASK_PORT` ⚠️ | não | `0.0.0.0` / `5000` | `run.py` (se não houver `network-config.json`) |
+| `FLASK_ENV` | não | `production` | `routes/health_routes.py` |
+| `FLASK_HOST` / `FLASK_PORT` | não | `0.0.0.0` / `5000` | `run.py` (se não houver `network-config.json`) |
 | `FRONTEND_ORIGIN` | não | lista embutida (localhost + Vercel) | `app/__init__.py` (CORS, CSV) |
 | `RATELIMIT_STORAGE_URI` | não | `memory://` (warning em produção) | `app/__init__.py` |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | para o seed do 1º admin | — (sem elas, sem seed) | `models/user_model.py` |
 | `ADMIN_NAME` | não | `Administrador` | `models/user_model.py` |
 | `SUPABASE_URL` / `SUPABASE_KEY` | para upload de imagens | — (serviço fica indisponível) | `services/supabase_storage.py` |
 | `SUPABASE_BUCKET` | não | `product-images` | `services/supabase_storage.py` |
-| `SUPABASE_SERVICE_ROLE_EMAIL` ⚠️ / `SUPABASE_SERVICE_ROLE_KEY` ⚠️ | não (retry de RLS) | — | `services/supabase_storage.py` |
+| `SUPABASE_SERVICE_ROLE_EMAIL` / `SUPABASE_SERVICE_ROLE_KEY` | não (retry de RLS) | — | `services/supabase_storage.py` |
 | `SMTP_HOST` / `SMTP_PORT` | não | `smtp.gmail.com` / `587` | `services/email_service.py` |
 | `SMTP_USER` / `SMTP_PASSWORD` | para envio de e-mails | — (sem elas, e-mails só logam) | `services/email_service.py` |
 | `FROM_EMAIL` / `FROM_NAME` | não | `SMTP_USER` / `Luxus Brechó` | `services/email_service.py` |
 | `FRONTEND_URL` | para links de reset de senha | `http://localhost:5173` | `services/email_service.py` |
-| `PRODUCTION_URL` ⚠️ / `APP_URL` ⚠️ | não (base dos links de e-mail em produção) | fallback: `network-config.json` → localhost | `services/email_service.py` |
+| `PRODUCTION_URL` / `APP_URL` | não (base dos links de e-mail em produção) | fallback: `network-config.json` → localhost | `services/email_service.py` |
 
 Notas:
 - Sem `MONGODB_URI` o servidor **ainda sobe**, mas rotas que dependem do banco respondem `503` (decorator `@require_db`).
@@ -117,7 +118,9 @@ EXPO_PUBLIC_API_URL=http://SEU_IP:5000/api
 EXPO_PUBLIC_PRODUCTION_URL=https://sua-api-producao/api
 EXPO_PUBLIC_ENABLE_LOGS=true
 ```
-Toda configuração do app vive em `constants/config.ts` e pode ser sobrescrita por variáveis `EXPO_PUBLIC_*` (timeouts, retries, cache, frete, paginação).
+Toda configuração do app vive em `constants/config.ts` (timeouts, retries, cache, frete, paginação).
+
+> ⚠️ **As variáveis `EXPO_PUBLIC_*` acima não têm efeito hoje** ([MB-09](./alinhamento-e-debitos.md#mb-09)): o `config.ts` lê `process.env[key]` dinamicamente e o Metro só inlina acesso por ponto, então todas caem no fallback. Em dev o fallback vem do `network-config.json`; em produção, do valor embutido no próprio `config.ts`. Para mudar a URL da API, edite essas fontes — o `.env` não será lido.
 
 ## Configuração de rede para o mobile (passo crítico)
 

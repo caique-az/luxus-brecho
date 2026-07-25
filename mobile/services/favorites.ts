@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiUrl } from '../utils/networkUtils';
 import { CONFIG } from '../constants/config';
 import { authService } from './auth';
@@ -7,48 +6,28 @@ const API_BASE_URL = getApiUrl();
 
 /**
  * Service para gerenciar favoritos via API.
- * Todas as requisições incluem o X-User-Id do usuário logado.
+ *
+ * A identidade vai no Bearer token (`authService.getAuthHeaders`). O header
+ * `X-User-Id` que este arquivo anexava era do esquema antigo, removido do
+ * backend por ser falsificável — as rotas de favoritos são `@jwt_required` e
+ * leem `g.user_id`.
  */
 
-// Função auxiliar para obter user_id
-const getUserId = async (): Promise<string | null> => {
-  try {
-    const userStr = await AsyncStorage.getItem('@luxus_brecho:user_data');
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      return user.id || user._id;
-    }
-  } catch (error) {
-    console.error('Erro ao obter user_id:', error);
-  }
-  return null;
-};
-
-// Função auxiliar para fazer requisições com X-User-Id
-const fetchWithUserId = async (
+const fetchAutenticado = async (
   endpoint: string,
   options: RequestInit = {}
 ): Promise<Response> => {
-  const userId = await getUserId();
-  
-  if (!userId) {
-    throw new Error('Usuário não autenticado');
-  }
-
   const authHeaders = await authService.getAuthHeaders();
   const headers = {
     'Content-Type': 'application/json',
-    'X-User-Id': userId,
     ...authHeaders,
     ...options.headers,
   };
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  return fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers,
   });
-
-  return response;
 };
 
 export interface FavoriteProduct {
@@ -79,7 +58,7 @@ export const favoritesService = {
    */
   async getFavorites(): Promise<{ success: boolean; favorites: FavoriteItem[]; total: number; error?: string }> {
     try {
-      const response = await fetchWithUserId('/favorites');
+      const response = await fetchAutenticado('/favorites');
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -118,7 +97,7 @@ export const favoritesService = {
    */
   async addFavorite(productId: number): Promise<{ success: boolean; alreadyFavorite?: boolean; error?: string }> {
     try {
-      const response = await fetchWithUserId('/favorites', {
+      const response = await fetchAutenticado('/favorites', {
         method: 'POST',
         body: JSON.stringify({ product_id: productId }),
       });
@@ -153,7 +132,7 @@ export const favoritesService = {
    */
   async removeFavorite(productId: number): Promise<{ success: boolean; error?: string }> {
     try {
-      const response = await fetchWithUserId(`/favorites/${productId}`, {
+      const response = await fetchAutenticado(`/favorites/${productId}`, {
         method: 'DELETE',
       });
 
@@ -184,7 +163,7 @@ export const favoritesService = {
    */
   async isFavorited(productId: number): Promise<boolean> {
     try {
-      const response = await fetchWithUserId(`/favorites/check/${productId}`);
+      const response = await fetchAutenticado(`/favorites/check/${productId}`);
 
       if (!response.ok) {
         return false;
@@ -203,7 +182,7 @@ export const favoritesService = {
    */
   async toggleFavorite(productId: number): Promise<{ success: boolean; isFavorited?: boolean; error?: string }> {
     try {
-      const response = await fetchWithUserId('/favorites/toggle', {
+      const response = await fetchAutenticado('/favorites/toggle', {
         method: 'POST',
         body: JSON.stringify({ product_id: productId }),
       });

@@ -1,5 +1,16 @@
+interface NetworkConfig {
+  mobile: {
+    api_urls: {
+      local: string;
+      network: string;
+      emulator: string;
+      production: string;
+    };
+  };
+}
+
 // Importação condicional do arquivo network-config.json apenas em desenvolvimento
-let networkConfig: any = {
+let networkConfig: NetworkConfig = {
   mobile: {
     api_urls: {
       local: 'http://localhost:5000/api',
@@ -14,25 +25,37 @@ let networkConfig: any = {
 if (__DEV__) {
   try {
     networkConfig = require('../network-config.json');
-  } catch (error) {
+  } catch {
     console.warn('network-config.json não encontrado, usando valores padrão');
   }
 }
 
-// Função para obter valor de env com fallback
+// ATENÇÃO: estes três helpers não funcionam no bundle — ver MB-09.
+// O Metro do Expo inlina env vars com o regex /process\.env\.([a-zA-Z0-9_]+)/,
+// que só casa com acesso por ponto. O acesso dinâmico abaixo nunca é
+// substituído e, como `process.env` não existe em runtime no app, TODA
+// EXPO_PUBLIC_* cai no fallback. As supressões do eslint mantêm o aviso
+// visível no débito em vez de no build; remova-as junto com a correção.
 const getEnvValue = (key: string, fallback: string): string => {
+  // eslint-disable-next-line expo/no-dynamic-env-var
   return process.env[key] || fallback;
 };
 
 const getEnvBoolean = (key: string, fallback: boolean): boolean => {
+  // eslint-disable-next-line expo/no-dynamic-env-var
   const value = process.env[key];
-  if (value === undefined) return fallback;
+  if (value === undefined) {
+    return fallback;
+  }
   return value.toLowerCase() === 'true';
 };
 
 const getEnvNumber = (key: string, fallback: number): number => {
+  // eslint-disable-next-line expo/no-dynamic-env-var
   const value = process.env[key];
-  if (value === undefined) return fallback;
+  if (value === undefined) {
+    return fallback;
+  }
   const parsed = parseFloat(value);
   return isNaN(parsed) ? fallback : parsed;
 };
@@ -96,18 +119,8 @@ export const CONFIG = {
   }
 } as const;
 
-// Helper function to get the appropriate API URL based on environment
-export const getApiUrl = (): string => {
-  const { NETWORK, DEBUG } = CONFIG;
-  
-  // Em produção, sempre usa a URL de produção
-  if (!__DEV__) {
-    return NETWORK.PRODUCTION_URL;
-  }
-  
-  // Em desenvolvimento, usa a URL da rede local
-  return NETWORK.NETWORK_URL;
-};
+// getApiUrl vive em utils/networkUtils.ts — era duplicada aqui, e esta cópia não
+// era importada por ninguém: quem alterasse a daqui não veria efeito nenhum.
 
 // Export individual sections for easier imports
 export const API_CONFIG = CONFIG.API;

@@ -1,12 +1,15 @@
-import os
 import logging
 from dotenv import load_dotenv
 
 # Carrega variáveis de ambiente ANTES de qualquer outra coisa
 load_dotenv()
 
+# config só lê o ambiente quando a função é chamada, então importá-lo aqui não
+# antecipa nenhuma leitura para antes do load_dotenv() acima.
+from . import config
+
 # Configuração de logging ANTES de importar bibliotecas que usam logging
-_debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+_debug_mode = config.debug_mode()
 _log_level = logging.DEBUG if _debug_mode else logging.INFO
 
 logging.basicConfig(
@@ -77,9 +80,9 @@ def create_app():
     app = Flask(__name__)
     
     # Configurações básicas
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
-    app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 16777216))  # 16MB
-    app.config['DEBUG'] = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.config['SECRET_KEY'] = config.secret_key()
+    app.config['MAX_CONTENT_LENGTH'] = config.max_content_length()
+    app.config['DEBUG'] = config.debug_mode()
     app.config['PROPAGATE_EXCEPTIONS'] = True  # Melhor tratamento de erros
     app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False  # Reduz tamanho do JSON
     
@@ -99,7 +102,7 @@ def create_app():
         # cada restart, enfraquecendo a proteção de brute-force. Aponte
         # RATELIMIT_STORAGE_URI para um storage compartilhado (ex.: redis://) em
         # produção.
-        storage_uri = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
+        storage_uri = config.ratelimit_storage_uri()
         limiter = Limiter(
             key_func=get_remote_address,
             app=app,
@@ -119,7 +122,7 @@ def create_app():
         app.limiter = None
     
     # Configuração CORS unificada (web + mobile)
-    allowed_origins_env = os.getenv("FRONTEND_ORIGIN")
+    allowed_origins_env = config.frontend_origin()
     if allowed_origins_env:
         allowed_origins = [o.strip() for o in allowed_origins_env.split(",")]
     else:
@@ -167,20 +170,16 @@ def create_app():
     app.db = None
     
     # Configuração do MongoDB
-    uri = os.getenv("MONGODB_URI")
+    uri = config.mongodb_uri()
     if uri:
         try:
-            db_name_env = os.getenv("MONGODB_DATABASE")
-            
+            db_name_env = config.mongodb_database()
+
             # Configurações de conexão
             client_kwargs = dict(
-                serverSelectionTimeoutMS=int(os.getenv("MONGO_SERVER_SELECTION_MS", "15000")),
-                connectTimeoutMS=int(os.getenv("MONGO_CONNECT_TIMEOUT_MS", "20000")),
-                socketTimeoutMS=int(os.getenv("MONGO_SOCKET_TIMEOUT_MS", "20000")),
-                maxPoolSize=int(os.getenv("MONGO_MAX_POOL_SIZE", "50")),
+                **config.mongo_client_options(),
                 retryWrites=True,
                 server_api=ServerApi("1"),
-                appname=os.getenv("MONGO_APPNAME", "Luxus-Brecho-Backend"),
             )
             
             # Usa CA apenas quando faz sentido (Atlas/SRV/TLS)

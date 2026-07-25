@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify
 from flask_cors import cross_origin
-import os
+
+from app import config
 import psutil
 import datetime
 
@@ -24,8 +25,8 @@ def health_check():
                 'available': memory.available,
                 'percent': memory.percent
             },
-            'environment': os.environ.get('FLASK_ENV', 'production'),
-            'debug': os.environ.get('FLASK_DEBUG', 'False').lower() == 'true',
+            'environment': config.env_name(),
+            'debug': config.debug_mode(),
             'version': '1.0.0'
         }
         

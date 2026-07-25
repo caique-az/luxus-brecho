@@ -39,7 +39,9 @@ rota (routes/X_routes.py)
 
 ## Configuração
 
-**Não há `config.py`**: as env vars são lidas inline, espalhadas por `app/__init__.py`, `services/*` e `models/user_model.py` ([BE-04](../alinhamento-e-debitos.md#be-04)). A tabela canônica de variáveis (com obrigatoriedade, default e onde cada uma é lida) está em [setup-e-deploy.md](../setup-e-deploy.md). O `.env.example` está incompleto ([BE-03](../alinhamento-e-debitos.md#be-03)).
+**`app/config.py` é a superfície de configuração**: cada env var tem uma função lá, que concentra nome, default e parsing — nenhum módulo lê `os.environ` por conta própria. São funções (não constantes) de propósito: ler no import congelaria o valor antes de os testes ajustarem o ambiente (`test_phase4_admin_seed.py` faz `monkeypatch.setenv("ADMIN_EMAIL", ...)`). Campo numérico inválido avisa e cai no default, em vez de estourar. A exceção deliberada é `JWT_SECRET_KEY`, lida no import de `jwt_service.py` para que a ausência derrube o **startup**, não a primeira requisição autenticada.
+
+A tabela canônica de variáveis (com obrigatoriedade, default e quem consome) está em [setup-e-deploy.md](../setup-e-deploy.md).
 
 ## Testes (`backend/tests/`)
 

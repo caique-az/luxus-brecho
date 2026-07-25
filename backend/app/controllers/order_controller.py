@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict, Any
 
 from ..utils.responses import ok, err
+from ..utils.pagination import parse_pagination
 from ..models.order_model import (
     get_collection,
     get_next_id,
@@ -31,10 +32,8 @@ def get_user_orders(user_id: int):
     db = current_app.db
 
     try:
-        # Parâmetros de paginação
-        page = max(int(request.args.get("page", 1) or 1), 1)
-        page_size = min(max(int(request.args.get("page_size", 20) or 20), 1), 100)
-        
+        page, page_size, skip = parse_pagination(default_page_size=20)
+
         coll = get_collection(db)
         
         # Query com filtro por usuário
@@ -44,7 +43,6 @@ def get_user_orders(user_id: int):
         total = coll.count_documents(query)
         
         # Busca com paginação
-        skip = (page - 1) * page_size
         orders = list(coll.find(query).sort("created_at", -1).skip(skip).limit(page_size))
         
         return ok({

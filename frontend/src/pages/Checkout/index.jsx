@@ -127,13 +127,12 @@ const Checkout = () => {
     setLoading(true);
 
     try {
-      // Preparar itens para o pedido
+      // Só o product_id: o backend resolve preço, título e imagem a partir do
+      // banco (confiar no preço vindo do cliente abriria manipulação de valor) e
+      // não tem quantidade — cada produto é peça única. Os demais campos que este
+      // payload carregava eram ignorados.
       const orderItems = cartItems.map(item => ({
         product_id: item.product_id || item.id,
-        quantity: item.quantity || 1,
-        preco_unitario: item.product?.preco || item.preco,
-        titulo: item.product?.titulo || item.titulo,
-        imagem_url: item.product?.imagem_url || item.imagem_url,
       }));
 
       await api.post(`/orders/user/${user.id}`, {

@@ -8,15 +8,15 @@ Modelo e utilidades para a coleção de usuários.
 """
 from typing import Dict, Any, Tuple, Optional
 from pymongo import ASCENDING, TEXT
-from pymongo.collection import ReturnDocument
 import bcrypt
-import os
 import re
 import secrets
 from datetime import datetime, timedelta
 
+from app import config
+from app.utils.counters import next_sequence
+
 COLLECTION_NAME = "users"
-COUNTERS_COLLECTION = "counters"
 COUNTER_KEY_USERS = "users"
 
 # Tipos de usuário permitidos
@@ -148,14 +148,7 @@ def get_collection(db):
 
 def get_next_id(db) -> int:
     """Gera próximo ID sequencial para usuário."""
-    counters = db[COUNTERS_COLLECTION]
-    result = counters.find_one_and_update(
-        {"name": COUNTER_KEY_USERS},
-        {"$inc": {"seq": 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER
-    )
-    return result["seq"]
+    return next_sequence(db, COUNTER_KEY_USERS)
 
 def validate_user_payload(payload: Dict[str, Any], is_update: bool = False) -> Tuple[bool, str]:
     """
@@ -363,8 +356,7 @@ def create_default_admin(db):
         if collection.find_one({"tipo": "Administrador"}):
             return
 
-        admin_email = os.environ.get("ADMIN_EMAIL")
-        admin_password = os.environ.get("ADMIN_PASSWORD")
+        admin_email, admin_password, admin_name = config.admin_seed()
         if not admin_email or not admin_password:
             print(
                 "ℹ️  ADMIN_EMAIL/ADMIN_PASSWORD não definidos — administrador "
@@ -373,7 +365,7 @@ def create_default_admin(db):
             return
 
         admin_data = {
-            "nome": os.environ.get("ADMIN_NAME", "Administrador"),
+            "nome": admin_name,
             "email": admin_email,
             "senha": admin_password,
             "tipo": "Administrador",
