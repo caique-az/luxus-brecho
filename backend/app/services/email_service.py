@@ -4,11 +4,11 @@ Utiliza SMTP para enviar emails de confirmação e outros.
 """
 import smtplib
 import os
-import json
-from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
+
+from app.utils.network import get_base_url
 
 # Configurações de email (devem ser definidas nas variáveis de ambiente)
 SMTP_HOST = os.getenv('SMTP_HOST', 'smtp.gmail.com')
@@ -25,43 +25,24 @@ def get_app_url() -> str:
     Prioridade:
     1. PRODUCTION_URL do .env (para produção - domínio real)
     2. APP_URL do .env (para desenvolvimento - pode ser customizado)
-    3. network-config.json (IP da rede local)
-    4. Fallback final para localhost:5000
+    3. IP da rede local detectado em tempo de execução
     """
     # 1. Verifica se há URL de produção configurada
     production_url = os.getenv('PRODUCTION_URL', '').strip()
     if production_url:
         print(f"📧 Email Service usando PRODUCTION_URL: {production_url}")
         return production_url
-    
+
     # 2. Verifica variável APP_URL customizada
     app_url_env = os.getenv('APP_URL', '').strip()
     if app_url_env:
         print(f"📧 Email Service usando APP_URL do .env: {app_url_env}")
         return app_url_env
-    
-    # 3. Tenta carregar do network-config.json (desenvolvimento local)
-    try:
-        config_path = Path(__file__).parent.parent.parent.parent / 'network-config.json'
-        
-        if config_path.exists():
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                backend_config = config.get('backend', {})
-                current_ip = backend_config.get('current_ip')
-                port = backend_config.get('port', 5000)
-                
-                if current_ip:
-                    app_url = f"http://{current_ip}:{port}"
-                    print(f"📧 Email Service usando URL do network-config.json: {app_url}")
-                    return app_url
-    except Exception as e:
-        print(f"⚠️  Erro ao ler network-config.json: {e}")
-    
-    # 4. Fallback final
-    fallback_url = 'http://localhost:5000'
-    print(f"⚠️  Email Service usando fallback: {fallback_url}")
-    return fallback_url
+
+    # 3. Deriva do endereço de rede da máquina (cai em localhost se não houver)
+    app_url = get_base_url()
+    print(f"📧 Email Service usando endereço detectado: {app_url}")
+    return app_url
 
 
 # URL base da aplicação (carregada dinamicamente)
