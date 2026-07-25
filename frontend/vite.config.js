@@ -9,6 +9,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       open: true,
+      // Escuta em todas as interfaces para permitir testar de outro
+      // dispositivo da mesma rede (o app deriva a API do host acessado)
+      host: true,
       proxy: {
         '/api': {
           target: apiTarget,
