@@ -27,7 +27,9 @@ Cada página é uma pasta `src/pages/<Pagina>/` com `index.jsx` + `index.css` co
 
 ## Camada de API (`src/services/`)
 
-**`api.js`** — instância axios única. `baseURL = ${VITE_API_URL || http://127.0.0.1:5000}/api`, timeout 10s.
+**`apiConfig.js`** — fonte única da URL da API, consumida por `api.js` e `auth.js`. `VITE_API_URL` vence quando definida (normalizada: aceita com ou sem `/api`); em dev sem a variável, deriva de `window.location.hostname` na porta `VITE_API_PORT` (default 5000). Exporta `API_BASE_URL` (sem sufixo) e `API_URL` (com `/api`).
+
+**`api.js`** — instância axios única com `baseURL = API_URL`, timeout 10s.
 
 - Interceptor de **request**: injeta `Authorization: Bearer <accessToken>` em tudo, exceto nas rotas de auth (`/users/auth`, `/users/refresh-token`, `/users/forgot-password`, `/users/reset-password`).
 - Interceptor de **response**: em 401, faz **refresh automático** com flag `isRefreshing` + fila `failedQueue` (evita refresh concorrente; requisições em espera são repetidas com o token novo). Se o refresh falha: `logout()` + redirect para `/login`.

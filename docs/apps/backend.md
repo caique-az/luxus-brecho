@@ -34,7 +34,8 @@ rota (routes/X_routes.py)
 
 ## Entrypoints
 
-- **`run.py`** — execução local. Lê `network-config.json` da raiz (se existir) para host/porta/IP; senão `FLASK_HOST`/`FLASK_PORT` (default `0.0.0.0:5000`). Usa `use_reloader=False` de propósito (evita `WinError 10038` no Windows).
+- **`run.py`** — execução local. Host/porta vêm de `app/utils/network.py`, com precedência `FLASK_HOST`/`FLASK_PORT` → `network-config.json` → `0.0.0.0:5000`; o IP da rede é detectado em tempo de execução. Usa `use_reloader=False` de propósito (evita `WinError 10038` no Windows).
+- **`utils/network.py`** — `detect_lan_ip()` (socket UDP sobre a tabela de rotas, sem enviar pacote), `resolve_server_config()` (host/porta/IP para o boot) e `get_base_url()` (base dos links de e-mail fora do contexto HTTP).
 - **`index.py`** — handler serverless da Vercel (reexporta o app da factory).
 
 ## Configuração

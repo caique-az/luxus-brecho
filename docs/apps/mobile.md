@@ -38,7 +38,9 @@ Resíduo conhecido:
 - injeta o `Authorization: Bearer` quando há sessão (via `authService.getAuthHeaders()`), preservando headers já definidos pela chamada;
 - cobre produtos, categorias, imagens e health/testConnection.
 
-**`constants/config.ts`** — objeto `CONFIG` com tudo configurável por `EXPO_PUBLIC_*` (API, NETWORK, CART, PAGINATION, CATEGORIES, APP, DEBUG). Em dev, faz `require('../network-config.json')` para descobrir a `NETWORK_URL` (gerado por `npm run dev` na raiz).
+**`constants/config.ts`** — objeto `CONFIG` com tudo configurável por `EXPO_PUBLIC_*` (API, NETWORK, CART, PAGINATION, CATEGORIES, APP, DEBUG). A `NETWORK_URL` é derivada do host do dev server (`Constants.expoConfig.hostUri`) na porta `EXPO_PUBLIC_API_PORT` (default 5000) — o Metro roda na mesma máquina que o backend. Precedência: `EXPO_PUBLIC_NETWORK_URL` → host do dev server → `network-config.json` (fallback opcional, se o arquivo existir).
+
+Quando o host derivado é loopback (Metro via `adb reverse`), a URL cai para `EMULATOR_URL` (`10.0.2.2`) no Android e `LOCAL_URL` no iOS. Com `expo start --tunnel` a derivação não serve — defina `EXPO_PUBLIC_NETWORK_URL`. Ver [decisions.md § ADR-0001](../decisions.md#adr-0001--cada-app-descobre-o-endereço-da-api-por-conta-própria).
 
 **`getApiUrl()` existe duplicada** ([MB-06](../alinhamento-e-debitos.md#mb-06)): em `constants/config.ts` (não usada pelos services) e em `utils/networkUtils.ts` — **esta é a efetivamente importada** por api/auth/favorites/stores/telas. Ambas: produção → `PRODUCTION_URL`; dev → `NETWORK_URL`.
 

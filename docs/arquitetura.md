@@ -46,7 +46,7 @@ graph TD
 As três aplicações evoluem juntas e dependem do mesmo contrato de API. Mantê-las no mesmo repositório permite:
 
 - Alterar um endpoint e seus consumidores (web + mobile) no mesmo commit/PR.
-- Compartilhar a **configuração de rede** (`network-config.json`) entre backend e mobile sem publicar pacotes.
+- Compartilhar **scripts de desenvolvimento** (sincronização de rede, orquestração dos apps) sem publicar pacotes.
 - Ter scripts orquestradores na raiz que sobem o ambiente (ver [Scripts da raiz](#scripts-da-raiz)).
 
 Cada app, porém, tem seu próprio gerenciador de dependências e ciclo de deploy — não há build unificado nem workspace de pacotes.
@@ -226,24 +226,25 @@ services/api.ts      →  ApiService com timeout, retry/backoff e cache (AsyncSt
 schemas/             →  Zod + hooks/useZodForm.ts
 ```
 
-- **`constants/config.ts`** centraliza a configuração via `EXPO_PUBLIC_*`. A `getApiUrl()` efetivamente usada vem de `utils/networkUtils.ts` (produção → `PRODUCTION_URL`; dev → `NETWORK_URL`, o IP da máquina na rede local).
+- **`constants/config.ts`** centraliza a configuração via `EXPO_PUBLIC_*`. A `getApiUrl()` efetivamente usada vem de `utils/networkUtils.ts` (produção → `PRODUCTION_URL`; dev → `NETWORK_URL`, derivada do host do dev server).
 - **`services/api.ts`** implementa retry com backoff e **cache local de respostas GET** via AsyncStorage.
 
 **Importante:** o mobile agora usa JWT (Bearer + refresh), mas ainda carrega resíduos — favoritos anexam o header legado `X-User-Id` (ignorado pelo backend) e o carrinho modela `quantity`. O estado real está em [apps/mobile.md](./apps/mobile.md) e na [matriz de alinhamento](./alinhamento-e-debitos.md#matriz-de-alinhamento).
 
 ## Configuração de rede entre dispositivos
 
-Testar o mobile em um aparelho físico exige que ele alcance o backend pelo IP da máquina na Wi-Fi. Isso é resolvido por um arquivo gerado e compartilhado:
+Testar o mobile em um aparelho físico exige que ele alcance o backend pelo IP da máquina na Wi-Fi. Cada app descobre esse endereço no momento em que sobe, sem arquivo intermediário:
 
 ```mermaid
 graph LR
-    A["npm run dev (raiz)<br/>sync-network.js"] -->|detecta IPv4| B["network-config.json (raiz)"]
-    A -->|copia| C["mobile/network-config.json"]
-    B -->|run.py lê host/porta/IP| D["Backend Flask"]
-    C -->|config.ts faz require em dev| E["Mobile (NETWORK_URL)"]
+    A["Backend Flask<br/>app/utils/network.py"] -->|socket UDP → tabela de rotas| B["IP da rede local"]
+    C["Mobile<br/>constants/config.ts"] -->|Constants.expoConfig.hostUri| D["host do Metro = host da API"]
+    E["Frontend<br/>services/apiConfig.js"] -->|window.location.hostname| F["host da página = host da API"]
 ```
 
-`network-config.json` **não é versionado** (use `network-config.example.json` como referência). Ao trocar de rede, rode `npm run dev` de novo e reinicie o Metro com `--clear`. Detalhes operacionais em [setup-e-deploy.md](./setup-e-deploy.md).
+O `network-config.json` gerado por `npm run dev` **não é versionado** e hoje é apenas um override opcional: o backend respeita `host`/`port` dele, e o mobile o usa como fallback quando não há dev server. Trocar de rede não exige regenerá-lo.
+
+Duas premissas dessa derivação: o Metro roda na mesma máquina que o backend (com `expo start --tunnel` ela não vale — use `EXPO_PUBLIC_NETWORK_URL`), e o emulador Android é tratado como caso especial (`hostUri` reporta `localhost` via `adb reverse`, então cai para `10.0.2.2`). Racional completo em [decisions.md § ADR-0001](./decisions.md#adr-0001--cada-app-descobre-o-endereço-da-api-por-conta-própria); detalhes operacionais em [setup-e-deploy.md](./setup-e-deploy.md).
 
 ## Scripts da raiz
 
@@ -251,7 +252,7 @@ O `package.json` da raiz é só orquestração (não tem dependências de app):
 
 | Script | O que faz |
 |--------|-----------|
-| `npm run dev` | `sync-network.js` — detecta o IP e gera/copia `network-config.json` |
+| `npm run dev` | `sync-network.js` — gera/copia `network-config.json` (override opcional; não é mais pré-requisito) |
 | `npm run dev:full` | `start-dev.js` — sobe **backend + mobile** (não o frontend web) |
 | `npm run backend` / `frontend` / `mobile` | sobe cada app individualmente |
 

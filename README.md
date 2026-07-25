@@ -32,8 +32,7 @@ python run.py                 # http://localhost:5000/api
 cd frontend && npm install
 npm run dev                   # http://localhost:5173
 
-# Mobile (na raiz, primeiro sincronize o IP da rede)
-npm run dev                   # gera network-config.json
+# Mobile (o app descobre o IP da rede pelo host do Metro)
 cd mobile && npx expo start --clear
 ```
 

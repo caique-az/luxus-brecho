@@ -72,7 +72,7 @@ Roteamento é o Expo Router: criar `app/nome.tsx` cria a rota `/nome`; `app/(tab
 
 - Cada app tem seu `.env` (ver [setup-e-deploy.md](./setup-e-deploy.md)); use os `.env.example` como base.
 - Prefixos importam: frontend usa `VITE_*`, mobile usa `EXPO_PUBLIC_*` (sem o prefixo a variável não é embarcada no bundle).
-- `network-config.json` é gerado por `npm run dev` e **não é versionado**.
+- `network-config.json` é gerado por `npm run dev`, **não é versionado** e é apenas um override opcional — cada app detecta o endereço de rede sozinho.
 
 ## Estilo de código
 

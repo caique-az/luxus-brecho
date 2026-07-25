@@ -10,6 +10,7 @@ Esta documentação descreve o **estado atual do código** — incluindo diverg�
 - **Quero consumir a API** → [api-reference.md](./api-reference.md) (contrato geral) e depois o recurso específico em [`api/`](./api/).
 - **Quero mexer num app** → o doc do app em [`apps/`](./apps/), começando pela seção de débitos dele.
 - **Quero subir o ambiente** → [setup-e-deploy.md](./setup-e-deploy.md).
+- **Quero saber por que algo é assim** → [decisions.md](./decisions.md) (registro de decisões arquiteturais).
 
 ## Índice completo
 
@@ -28,6 +29,7 @@ Esta documentação descreve o **estado atual do código** — incluindo diverg�
 | [apps/backend.md](./apps/backend.md) | Backend por dentro: utils, services, entrypoints, testes e limitações |
 | [apps/frontend.md](./apps/frontend.md) | Frontend web: rotas, stores Zustand, interceptors do axios, testes |
 | [apps/mobile.md](./apps/mobile.md) | Mobile: estado real (JWT, favoritos, carrinho, checkout) |
+| [decisions.md](./decisions.md) | **ADRs** — decisões arquiteturais com contexto, alternativas descartadas e consequências |
 | [alinhamento-e-debitos.md](./alinhamento-e-debitos.md) | **Doc vivo** — matriz de alinhamento Backend×Web×Mobile e todos os débitos conhecidos, com ID |
 | [setup-e-deploy.md](./setup-e-deploy.md) | Subir os 3 apps, **tabela canônica de env vars**, rede do mobile e publicação (Vercel/Expo) |
 | [convencoes.md](./convencoes.md) | Padrões de código, API, auth, testes, Git e **convenções de documentação** |

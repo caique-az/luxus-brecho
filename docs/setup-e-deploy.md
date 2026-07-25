@@ -19,12 +19,11 @@ Contas externas opcionais (mas necessárias para funcionalidades completas): **S
 ## Subindo tudo rápido (a partir da raiz)
 
 ```bash
-# 1. Sincroniza o IP da rede (gera network-config.json)
-npm run dev
-
-# 2. Sobe backend + mobile juntos (start-dev.js — não inclui o frontend web)
+# Sobe backend + mobile juntos (start-dev.js — não inclui o frontend web)
 npm run dev:full
 ```
+
+> Não é mais necessário rodar `npm run dev` antes: cada app detecta o endereço da rede sozinho (ver [Configuração de rede](#configuração-de-rede-para-o-mobile)). O script segue disponível para gerar o `network-config.json` como override.
 
 Ou rode cada parte isoladamente:
 
@@ -43,7 +42,7 @@ cp .env.example .env      # edite as variáveis
 python run.py             # http://localhost:5000/api
 ```
 
-`run.py` lê `network-config.json` da raiz (se existir) para definir host/porta/IP; sem o arquivo, cai para as variáveis `FLASK_HOST`/`FLASK_PORT`. O reloader do Flask fica **desligado de propósito** (`use_reloader=False`) para evitar `WinError 10038` no Windows.
+`run.py` delega a resolução de endereço para `app/utils/network.py`. Host e porta seguem a precedência **`FLASK_HOST`/`FLASK_PORT` → `network-config.json` → `0.0.0.0:5000`**; o IP da rede é detectado em tempo de execução (o `current_ip` do arquivo só entra se a detecção falhar, porque pode estar obsoleto). O reloader do Flask fica **desligado de propósito** (`use_reloader=False`) para evitar `WinError 10038` no Windows.
 
 Dois comportamentos de boot que valem destacar:
 
@@ -68,7 +67,7 @@ Não há `config.py` — cada variável é lida inline no arquivo indicado ([BE-
 | `MAX_CONTENT_LENGTH` ⚠️ | não | `16777216` (16MB) | `app/__init__.py` |
 | `FLASK_DEBUG` | não | `False` | `app/__init__.py`, health |
 | `FLASK_ENV` ⚠️ | não | `production` | `routes/health_routes.py` |
-| `FLASK_HOST` ⚠️ / `FLASK_PORT` ⚠️ | não | `0.0.0.0` / `5000` | `run.py` (se não houver `network-config.json`) |
+| `FLASK_HOST` ⚠️ / `FLASK_PORT` ⚠️ | não | `0.0.0.0` / `5000` | `utils/network.py` (têm precedência sobre `network-config.json`) |
 | `FRONTEND_ORIGIN` | não | lista embutida (localhost + Vercel) | `app/__init__.py` (CORS, CSV) |
 | `RATELIMIT_STORAGE_URI` | não | `memory://` (warning em produção) | `app/__init__.py` |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | para o seed do 1º admin | — (sem elas, sem seed) | `models/user_model.py` |
@@ -80,7 +79,7 @@ Não há `config.py` — cada variável é lida inline no arquivo indicado ([BE-
 | `SMTP_USER` / `SMTP_PASSWORD` | para envio de e-mails | — (sem elas, e-mails só logam) | `services/email_service.py` |
 | `FROM_EMAIL` / `FROM_NAME` | não | `SMTP_USER` / `Luxus Brechó` | `services/email_service.py` |
 | `FRONTEND_URL` | para links de reset de senha | `http://localhost:5173` | `services/email_service.py` |
-| `PRODUCTION_URL` ⚠️ / `APP_URL` ⚠️ | não (base dos links de e-mail em produção) | fallback: `network-config.json` → localhost | `services/email_service.py` |
+| `PRODUCTION_URL` ⚠️ / `APP_URL` ⚠️ | não (base dos links de e-mail em produção) | fallback: IP da rede detectado → localhost | `services/email_service.py` |
 
 Notas:
 - Sem `MONGODB_URI` o servidor **ainda sobe**, mas rotas que dependem do banco respondem `503` (decorator `@require_db`).
@@ -94,11 +93,13 @@ npm install
 npm run dev               # http://localhost:5173
 ```
 
-Variável de ambiente (`frontend/.env`):
+Variáveis de ambiente (`frontend/.env`):
 ```ini
-VITE_API_URL=http://127.0.0.1:5000
+VITE_API_URL=http://127.0.0.1:5000   # obrigatória em produção
+VITE_API_PORT=5000                   # opcional: porta usada na derivação em dev
 ```
-O cliente anexa `/api` a essa base. Sem a variável, o fallback é `http://127.0.0.1:5000`.
+
+`src/services/apiConfig.js` é a fonte única da base (usada por `api.js` e `auth.js`). Com `VITE_API_URL` definida, ela vence — e é aceita com ou sem o sufixo `/api`, que é normalizado para não duplicar. Sem ela, em dev a base é derivada do host que serviu a página: abrir `http://192.168.0.20:5173` faz a API apontar para `http://192.168.0.20:5000`. O dev server escuta em todas as interfaces (`server.host: true`), o que permite abrir o frontend de outro dispositivo da rede.
 
 ## Mobile
 
@@ -113,30 +114,40 @@ Escaneie o QR code com o **Expo Go**. Para dispositivo físico, o celular e o PC
 
 Variáveis (`mobile/.env`, prefixo obrigatório `EXPO_PUBLIC_`):
 ```ini
-EXPO_PUBLIC_API_URL=http://SEU_IP:5000/api
 EXPO_PUBLIC_PRODUCTION_URL=https://sua-api-producao/api
+EXPO_PUBLIC_API_PORT=5000                          # porta do backend em dev
+EXPO_PUBLIC_NETWORK_URL=http://SEU_IP:5000/api     # opcional: força o endereço em dev
 EXPO_PUBLIC_ENABLE_LOGS=true
 ```
 Toda configuração do app vive em `constants/config.ts` e pode ser sobrescrita por variáveis `EXPO_PUBLIC_*` (timeouts, retries, cache, frete, paginação).
 
-## Configuração de rede para o mobile (passo crítico)
+## Configuração de rede para o mobile
 
-O mobile precisa alcançar o backend pelo **IP da máquina na Wi-Fi**, não por `localhost`. O fluxo automatiza isso:
+O mobile precisa alcançar o backend pelo **IP da máquina na Wi-Fi**, não por `localhost`. Cada app resolve isso sozinho, sem passo prévio:
 
-1. Na **raiz**, rode `npm run dev`. O `sync-network.js` detecta o IPv4 da rede (`ipconfig` no Windows, `ifconfig`/`ip addr` no Linux/macOS) e escreve:
-   - `network-config.json` na raiz (lido pelo backend);
-   - `mobile/network-config.json` (lido pelo app em dev via `require`).
-2. Reinicie o backend para ele pegar o novo IP.
-3. Inicie o mobile com `npx expo start --clear` (o `--clear` evita cache de URL antiga).
+| App | Como descobre o endereço |
+|-----|--------------------------|
+| Backend | `app/utils/network.py` — socket UDP consulta a tabela de rotas do SO (nenhum pacote é enviado; não precisa de internet) |
+| Mobile | host do dev server via `Constants.expoConfig.hostUri` — o Metro roda na mesma máquina que o backend |
+| Frontend | `window.location.hostname` — o host pelo qual a página foi aberta |
+
+Consequência prática: trocar de rede Wi-Fi não exige regenerar arquivo nem `--clear`; basta o Metro reconectar.
+
+Dois casos que fogem da derivação simples:
+
+- **Emulador Android** — o Metro via `adb reverse` reporta `localhost`, que dentro do emulador é o próprio emulador; o app cai automaticamente para `10.0.2.2` (no simulador iOS, `localhost` funciona e é mantido).
+- **`expo start --tunnel`** — o `hostUri` passa a ser um host público (`*.exp.direct`) e a API derivada aponta para lá. Nesse modo, defina `EXPO_PUBLIC_NETWORK_URL` explicitamente.
+
+Racional e alternativas descartadas em [decisions.md § ADR-0001](./decisions.md#adr-0001--cada-app-descobre-o-endereço-da-api-por-conta-própria).
 
 Checklist quando o app não conecta:
 - O backend está rodando em `0.0.0.0:5000` (e não só `127.0.0.1`)?
 - Celular e PC na mesma rede Wi-Fi?
 - Firewall liberando a porta 5000?
-- O IP em `network-config.json` corresponde ao IP atual? (Rode `npm run dev` de novo após trocar de rede.)
+- O IP no banner de boot do `run.py` é o mesmo que o Expo mostra no QR code? (Se divergirem, a máquina tem múltiplas interfaces — force com `EXPO_PUBLIC_NETWORK_URL`.)
 - Teste direto: `curl http://<IP>:5000/api/health`.
 
-> `network-config.json` é **gerado** e não versionado. Use `network-config.example.json` como referência.
+> `network-config.json` é **gerado** (`npm run dev`) e não versionado — hoje é apenas um override opcional de `host`/`port` do backend e fallback do mobile. Use `network-config.example.json` como referência.
 
 ## Testes
 
