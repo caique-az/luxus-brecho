@@ -1,11 +1,11 @@
 import axios from 'axios';
 import { authService } from './auth';
+import { API_BASE_URL, API_URL } from './apiConfig';
 
-export const API_BASE_URL =
-  import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
+export { API_BASE_URL };
 
 const api = axios.create({
-  baseURL: `${API_BASE_URL}/api`,
+  baseURL: API_URL,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
