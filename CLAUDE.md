@@ -16,7 +16,7 @@ Cada subprojeto tem seu próprio gerenciamento de dependências (`pip` no backen
 
 ### Raiz (orquestração)
 ```bash
-npm run dev            # sync-network.js: detecta o IP da rede e gera network-config.json
+npm run dev            # sync-network.js: gera network-config.json (opcional — cada app detecta o IP sozinho)
 npm run dev:full       # start-dev.js: sobe backend + frontend juntos
 npm run backend        # cd backend && python run.py
 npm run frontend       # cd frontend && npm run dev
@@ -66,36 +66,38 @@ Convenções importantes:
 - Respostas JSON seguem o padrão `{ "success": bool, "message": str, ... }`.
 - `app.url_map.strict_slashes = False` — não confie em barra final para roteamento.
 - `app.db` pode ser `None` quando `MONGODB_URI` não está configurado; o app sobe mesmo sem banco.
-- `run.py` lê `network-config.json` da raiz (se existir) para host/porta/IP; caso contrário usa env vars. Usa `use_reloader=False` propositalmente para evitar `WinError 10038` no Windows.
+- `run.py` obtém host/porta/IP de `app/utils/network.py`: env vars (`FLASK_HOST`/`FLASK_PORT`) têm precedência sobre `network-config.json`, e o IP da rede é detectado em tempo de execução. Usa `use_reloader=False` propositalmente para evitar `WinError 10038` no Windows.
 - Auth via header `Authorization: Bearer <token>`, com access + refresh token.
 
 ### Frontend — SPA React por features
 - **`src/pages/<Pagina>/index.jsx` + `index.css`** — cada rota é uma pasta com componente e CSS co-localizados (nomes em português, ex.: `Carrinho`, `Favoritos`, `ProdutoDetalhes`). Páginas admin em `src/pages/Admin/`.
 - **`src/store/`** — stores Zustand (`authStore`, `cartStore`, `favoritesStore`). O `authStore` orquestra efeitos colaterais (ex.: ao logar, dispara `useFavoritesStore.loadFavorites()`).
 - **`src/services/`** — `api.js` é uma instância axios única com interceptors: injeta o Bearer token (exceto em rotas de auth) e faz **refresh automático de token em 401**, com fila (`failedQueue`) para não disparar refresh concorrente. Os demais arquivos (`products`, `auth`, `orders`, ...) são wrappers por domínio sobre essa instância.
-- Base da API: `import.meta.env.VITE_API_URL` (fallback `http://127.0.0.1:5000`), com `/api` anexado.
+- Base da API: `src/services/apiConfig.js` é a fonte única (`API_BASE_URL` e `API_URL`). Usa `VITE_API_URL` quando definida (aceita com ou sem `/api`); em dev sem a variável, deriva de `window.location.hostname` na porta `VITE_API_PORT` (default 5000) — abrir o Vite pelo IP da rede faz a API seguir o mesmo host.
 
 ### Mobile — Expo Router + camada de config de rede
 - **`app/`** — roteamento por arquivos do Expo Router. `(tabs)/` é o grupo de abas; rotas dinâmicas como `product/[id].tsx`; `admin/` para telas de gestão.
-- **`constants/config.ts`** — objeto `CONFIG` central, todo configurável por env vars `EXPO_PUBLIC_*`. `getApiUrl()` decide a URL: em produção usa `PRODUCTION_URL`, em dev usa `NETWORK_URL`.
+- **`constants/config.ts`** — objeto `CONFIG` central, todo configurável por env vars `EXPO_PUBLIC_*`. `getApiUrl()` decide a URL: em produção usa `PRODUCTION_URL`, em dev usa `NETWORK_URL`, que é derivada do host do dev server (`Constants.expoConfig.hostUri`) na porta `EXPO_PUBLIC_API_PORT` (default 5000).
 - **`services/api.ts`** — `ApiService` com timeout, retry/backoff e cache local (AsyncStorage via `cacheManager`) para GETs.
 - **`schemas/`** — validação Zod; `hooks/useZodForm.ts` integra com react-hook-form.
 
-## Configuração de rede entre dispositivos (importante)
+## Configuração de rede entre dispositivos
 
-Para testar o mobile em um dispositivo físico na mesma Wi-Fi, o IP da máquina precisa ser propagado para backend e mobile. O fluxo é:
+Para testar em um dispositivo físico na mesma Wi-Fi, cada app descobre o endereço da API por conta própria — **não é preciso rodar nada na raiz antes**:
 
-1. `npm run dev` na raiz roda `sync-network.js`, que detecta o IPv4 da rede (`ipconfig`/`ifconfig`) e escreve `network-config.json` na raiz **e** em `mobile/network-config.json`.
-2. O backend (`run.py`) lê esse arquivo para escolher host/porta/IP.
-3. O mobile (`constants/config.ts`) faz `require('../network-config.json')` em dev para descobrir a `NETWORK_URL`.
+- **Backend** — `app/utils/network.py` detecta o IP da máquina em tempo de execução (socket UDP consultando a tabela de rotas, sem enviar pacote). `resolve_server_config()` serve `run.py`; `get_base_url()` serve os links de e-mail.
+- **Mobile** — `constants/config.ts` deriva a URL do host do dev server (`Constants.expoConfig.hostUri`): o Metro roda na mesma máquina que o backend, então o IP que baixou o bundle é o IP da API. Sobrevive a troca de rede sem `--clear`.
+- **Frontend** — `src/services/apiConfig.js` deriva de `window.location.hostname`; o Vite escuta em todas as interfaces (`server.host: true`), então abrir `http://<ip>:5173` no celular já aponta a API para o mesmo IP.
 
-`network-config.json` é gerado (não versionado); use `network-config.example.json` como referência. Se mudar de rede, rode `npm run dev` de novo e reinicie o Metro com `--clear`.
+Casos especiais: emulador Android cai para `10.0.2.2` (o `hostUri` reporta `localhost` via `adb reverse`) e `expo start --tunnel` exige `EXPO_PUBLIC_NETWORK_URL`. Racional em `docs/decisions.md` (ADR-0001).
+
+`network-config.json` (gerado por `npm run dev`, não versionado) virou **override opcional**: o backend ainda respeita `host`/`port` dele, e o mobile usa `mobile.api_urls` como fallback quando não há dev server. Para forçar endereços manualmente, prefira as env vars (`FLASK_HOST`/`FLASK_PORT`, `VITE_API_URL`, `EXPO_PUBLIC_NETWORK_URL`).
 
 ## Variáveis de ambiente
 
 - **Backend** (`backend/.env`, ver `.env.example`): `MONGODB_URI`, `MONGODB_DATABASE`, `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `FLASK_DEBUG`, `FRONTEND_ORIGIN` (lista CSV de origens CORS), `SUPABASE_URL`/`SUPABASE_KEY`/`SUPABASE_BUCKET`, e bloco `SMTP_*` para emails.
-- **Frontend**: `VITE_API_URL`.
-- **Mobile**: prefixo `EXPO_PUBLIC_*` (ex.: `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_PRODUCTION_URL`).
+- **Frontend**: `VITE_API_URL` (obrigatória em produção), `VITE_API_PORT` (default 5000, usada na derivação em dev).
+- **Mobile**: prefixo `EXPO_PUBLIC_*` (ex.: `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_PRODUCTION_URL`, `EXPO_PUBLIC_API_PORT`).
 
 ## Regras de domínio
 

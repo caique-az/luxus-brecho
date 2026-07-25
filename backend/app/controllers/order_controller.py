@@ -1,10 +1,12 @@
 """
 Controller para gerenciamento de pedidos.
 """
-from flask import jsonify, request, current_app
+from flask import request, current_app, g
+from app.utils.db import require_db
 from datetime import datetime
 from typing import Dict, Any
 
+from ..utils.responses import ok, err
 from ..models.order_model import (
     get_collection,
     get_next_id,
@@ -12,14 +14,21 @@ from ..models.order_model import (
     validate_order,
     ORDER_STATUS,
 )
-from ..models.cart_model import get_collection as get_cart_collection
+from ..models.cart_model import get_collection as get_cart_collection, coerce_product_id
 
 
+def _forbidden_if_not_owner(order):
+    """Retorna uma resposta 403 se o solicitante não for o dono do pedido nem
+    admin; caso contrário, None. Requer g.user_id/g.user_type (jwt_required)."""
+    if g.user_type != "Administrador" and order.get("user_id") != g.user_id:
+        return err("Acesso negado. Você não tem permissão para este pedido", 403)
+    return None
+
+
+@require_db
 def get_user_orders(user_id: int):
     """Obtém todos os pedidos do usuário com paginação."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         # Parâmetros de paginação
@@ -38,7 +47,7 @@ def get_user_orders(user_id: int):
         skip = (page - 1) * page_size
         orders = list(coll.find(query).sort("created_at", -1).skip(skip).limit(page_size))
         
-        return jsonify({
+        return ok({
             "orders": [normalize_order(order) for order in orders],
             "pagination": {
                 "page": page,
@@ -49,79 +58,93 @@ def get_user_orders(user_id: int):
 
     except Exception as e:
         current_app.logger.error(f"Erro ao obter pedidos: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)
 
 
+@require_db
 def get_order_by_id(order_id: int):
     """Obtém um pedido específico pelo ID."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         coll = get_collection(db)
         order = coll.find_one({"id": order_id})
-        
+
         if not order:
-            return jsonify(message="Pedido não encontrado"), 404
-        
-        return jsonify(normalize_order(order))
+            return err("Pedido não encontrado", 404)
+
+        denied = _forbidden_if_not_owner(order)
+        if denied:
+            return denied
+
+        return ok(normalize_order(order))
 
     except Exception as e:
         current_app.logger.error(f"Erro ao obter pedido: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)
 
 
+@require_db
 def create_order(user_id: int):
     """Cria um novo pedido com transação para garantir consistência."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
         if not payload:
-            return jsonify(message="Payload JSON é obrigatório"), 400
+            return err("Payload JSON é obrigatório")
 
         payload["user_id"] = user_id
-        
+
         # Valida dados do pedido
         is_valid, error_msg = validate_order(payload)
         if not is_valid:
-            return jsonify(message=error_msg), 400
+            return err(error_msg)
 
-        # Busca informações dos produtos numa única query
+        # Resolve os produtos. Peça única: sem quantidade, cada preço conta uma vez.
+        # Qualquer product_id inválido (não-int → injeção NoSQL) ou inexistente/
+        # indisponível é rejeitado — nada de pular item e persistir total 0.
         products_coll = db["products"]
-        items = payload.get("items", [])
+
+        # Coage e deduplica os product_ids (peça única), preservando a ordem —
+        # um product_id não-int (injeção NoSQL) rejeita o pedido inteiro.
+        requested_ids = []
+        for item in payload.get("items", []):
+            product_id = coerce_product_id(item.get("product_id"))
+            if product_id is None:
+                return err("product_id inválido no pedido")
+            if product_id not in requested_ids:
+                requested_ids.append(product_id)
+
+        # Uma única query para todos os produtos do pedido (evita N+1).
         products_by_id = {
-            p["id"]: p
-            for p in products_coll.find(
-                {"id": {"$in": [item.get("product_id") for item in items]}},
-                {"_id": 0, "id": 1, "status": 1, "preco": 1, "titulo": 1, "imagem": 1},
-            )
+            p["id"]: p for p in products_coll.find({"id": {"$in": requested_ids}})
         }
 
         items_with_details = []
         total = 0
         product_ids_to_update = []
 
-        for item in items:
-            product = products_by_id.get(item.get("product_id"))
-            if product:
-                if product.get("status") != "disponivel":
-                    return jsonify(message=f"Produto '{product.get('titulo')}' não está disponível"), 400
-                
-                item_total = (product.get("preco", 0)) * item.get("quantity", 1)
-                items_with_details.append({
-                    "product_id": item.get("product_id"),
-                    "quantity": item.get("quantity", 1),
-                    "preco_unitario": product.get("preco", 0),
-                    "preco_total": item_total,
-                    "titulo": product.get("titulo"),
-                    "imagem": product.get("imagem"),
-                })
-                total += item_total
-                product_ids_to_update.append(item.get("product_id"))
+        for product_id in requested_ids:
+            product = products_by_id.get(product_id)
+            if not product:
+                return err(f"Produto {product_id} não encontrado", 404)
+
+            if product.get("status") != "disponivel":
+                return err(f"Produto '{product.get('titulo')}' não está disponível")
+
+            preco = product.get("preco", 0)
+            items_with_details.append({
+                "product_id": product_id,
+                "preco": preco,
+                "titulo": product.get("titulo"),
+                "imagem": product.get("imagem"),
+            })
+            total += preco
+            product_ids_to_update.append(product_id)
+
+        if not items_with_details:
+            return err("Pedido deve ter pelo menos um item válido")
 
         coll = get_collection(db)
         cart_coll = get_cart_collection(db)
@@ -149,14 +172,13 @@ def create_order(user_id: int):
                         # Insere pedido
                         coll.insert_one(order, session=session)
                         
-                        # Atualiza status dos produtos para vendido
-                        if product_ids_to_update:
-                            products_coll.update_many(
-                                {"id": {"$in": product_ids_to_update}},
-                                {"$set": {"status": "vendido"}},
-                                session=session
-                            )
-
+                        # Atualiza status dos produtos para vendido (uma query)
+                        products_coll.update_many(
+                            {"id": {"$in": product_ids_to_update}},
+                            {"$set": {"status": "vendido"}},
+                            session=session
+                        )
+                        
                         # Limpa o carrinho do usuário
                         cart_coll.update_one(
                             {"user_id": user_id},
@@ -173,25 +195,22 @@ def create_order(user_id: int):
             # Sem suporte a transações
             _create_order_without_transaction(coll, products_coll, cart_coll, order, product_ids_to_update, user_id, now)
 
-        return jsonify({
-            "message": "Pedido criado com sucesso",
-            "order": normalize_order(order),
-        }), 201
+        return ok(message="Pedido criado com sucesso", status=201, order=normalize_order(order))
 
     except Exception as e:
         current_app.logger.error(f"Erro ao criar pedido: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)
 
 
 def _create_order_without_transaction(coll, products_coll, cart_coll, order, product_ids, user_id, now):
     """Cria pedido sem transação (fallback)."""
     coll.insert_one(order)
 
-    if product_ids:
-        products_coll.update_many(
-            {"id": {"$in": product_ids}},
-            {"$set": {"status": "vendido"}}
-        )
+    # Marca todos os produtos como vendidos numa única query (evita N updates)
+    products_coll.update_many(
+        {"id": {"$in": product_ids}},
+        {"$set": {"status": "vendido"}}
+    )
 
     cart_coll.update_one(
         {"user_id": user_id},
@@ -199,20 +218,19 @@ def _create_order_without_transaction(coll, products_coll, cart_coll, order, pro
     )
 
 
+@require_db
 def update_order_status(order_id: int):
     """Atualiza o status de um pedido."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         payload = request.get_json()
         if not payload:
-            return jsonify(message="Payload JSON é obrigatório"), 400
+            return err("Payload JSON é obrigatório")
 
         new_status = payload.get("status")
         if not new_status or new_status not in ORDER_STATUS:
-            return jsonify(message=f"Status inválido. Valores permitidos: {', '.join(ORDER_STATUS)}"), 400
+            return err(f"Status inválido. Valores permitidos: {', '.join(ORDER_STATUS)}")
 
         coll = get_collection(db)
         now = datetime.utcnow()
@@ -223,24 +241,19 @@ def update_order_status(order_id: int):
         )
 
         if result.matched_count == 0:
-            return jsonify(message="Pedido não encontrado"), 404
+            return err("Pedido não encontrado", 404)
 
-        return jsonify({
-            "message": "Status atualizado com sucesso",
-            "order_id": order_id,
-            "status": new_status,
-        })
+        return ok({"order_id": order_id, "status": new_status}, message="Status atualizado com sucesso")
 
     except Exception as e:
         current_app.logger.error(f"Erro ao atualizar status: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)
 
 
+@require_db
 def cancel_order(order_id: int):
     """Cancela um pedido."""
     db = current_app.db
-    if db is None:
-        return jsonify(message="banco de dados indisponível"), 503
 
     try:
         coll = get_collection(db)
@@ -250,19 +263,22 @@ def cancel_order(order_id: int):
         # Busca o pedido
         order = coll.find_one({"id": order_id})
         if not order:
-            return jsonify(message="Pedido não encontrado"), 404
+            return err("Pedido não encontrado", 404)
+
+        denied = _forbidden_if_not_owner(order)
+        if denied:
+            return denied
 
         if order.get("status") == "cancelado":
-            return jsonify(message="Pedido já está cancelado"), 400
+            return err("Pedido já está cancelado")
 
         if order.get("status") in ["enviado", "entregue"]:
-            return jsonify(message="Não é possível cancelar pedido já enviado ou entregue"), 400
+            return err("Não é possível cancelar pedido já enviado ou entregue")
 
         # Restaura status dos produtos para disponível
-        product_ids = [item.get("product_id") for item in order.get("items", [])]
-        if product_ids:
-            products_coll.update_many(
-                {"id": {"$in": product_ids}},
+        for item in order.get("items", []):
+            products_coll.update_one(
+                {"id": item.get("product_id")},
                 {"$set": {"status": "disponivel"}}
             )
 
@@ -272,11 +288,8 @@ def cancel_order(order_id: int):
             {"$set": {"status": "cancelado", "updated_at": now}}
         )
 
-        return jsonify({
-            "message": "Pedido cancelado com sucesso",
-            "order_id": order_id,
-        })
+        return ok(message="Pedido cancelado com sucesso", order_id=order_id)
 
     except Exception as e:
         current_app.logger.error(f"Erro ao cancelar pedido: {e}")
-        return jsonify(message="Erro interno do servidor"), 500
+        return err("Erro interno do servidor", 500)

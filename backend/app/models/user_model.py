@@ -10,6 +10,7 @@ from typing import Dict, Any, Tuple, Optional
 from pymongo import ASCENDING, TEXT
 from pymongo.collection import ReturnDocument
 import bcrypt
+import os
 import re
 import secrets
 from datetime import datetime, timedelta
@@ -332,7 +333,13 @@ def ensure_users_collection(db):
         
         # Índice para busca por nome
         collection.create_index([("nome", TEXT)])
-        
+
+        # Índices esparsos para lookups por token (confirmação de email e reset
+        # de senha). Sem eles, confirm_email/reset_password varrem a coleção
+        # inteira. Esparsos: reset_token só existe em quem pediu reset.
+        collection.create_index([("token_confirmacao", ASCENDING)], sparse=True)
+        collection.create_index([("reset_token", ASCENDING)], sparse=True)
+
         print(f"✅ Índices criados para a coleção '{COLLECTION_NAME}'")
         
         # Cria usuário administrador padrão se não existir
@@ -342,36 +349,47 @@ def ensure_users_collection(db):
         print(f"❌ Erro ao configurar coleção de usuários: {e}")
 
 def create_default_admin(db):
-    """Cria usuário administrador padrão se não existir."""
+    """Cria o administrador inicial a partir de ADMIN_EMAIL/ADMIN_PASSWORD.
+
+    Sem esses env vars não há seed: nunca semeamos credenciais hardcoded — o
+    antigo `senha123` deixava todo banco novo comprometido para quem lesse o
+    repositório. O log jamais imprime a senha e reflete o e-mail real (o log
+    anterior mentia com credenciais inexistentes, atrapalhando a rotação).
+    """
     try:
         collection = get_collection(db)
-        
-        # Verifica se já existe um administrador
-        admin_exists = collection.find_one({"tipo": "Administrador"})
-        if admin_exists:
+
+        # Já existe um administrador? Nada a fazer.
+        if collection.find_one({"tipo": "Administrador"}):
             return
-        
-        # Cria administrador padrão
+
+        admin_email = os.environ.get("ADMIN_EMAIL")
+        admin_password = os.environ.get("ADMIN_PASSWORD")
+        if not admin_email or not admin_password:
+            print(
+                "ℹ️  ADMIN_EMAIL/ADMIN_PASSWORD não definidos — administrador "
+                "inicial não foi criado. Defina-os para semear o primeiro admin."
+            )
+            return
+
         admin_data = {
-            "nome": "Jow",
-            "email": "contatojmfr@gmail.com",
-            "senha": "senha123",  # Senha padrão - deve ser alterada
-            "tipo": "Administrador"
+            "nome": os.environ.get("ADMIN_NAME", "Administrador"),
+            "email": admin_email,
+            "senha": admin_password,
+            "tipo": "Administrador",
         }
-        
-        # Valida e prepara dados
+
+        # Valida (inclui a política de senha) e prepara os dados.
         is_valid, error = validate_user_payload(admin_data)
         if not is_valid:
-            print(f"❌ Erro ao validar administrador padrão: {error}")
+            print(f"❌ Erro ao validar administrador inicial: {error}")
             return
-        
+
         user_data = prepare_new_user(admin_data, db)
         collection.insert_one(user_data)
-        
-        print("✅ Usuário administrador padrão criado:")
-        print(f"   Email: {admin_data['email']}")
-        print(f"   Senha: {admin_data['senha']}")
-        print("   ⚠️  ALTERE A SENHA PADRÃO IMEDIATAMENTE!")
-        
+
+        print(f"✅ Administrador inicial criado: {admin_data['email']}")
+        print("   ⚠️  Faça login e troque a senha definida em ADMIN_PASSWORD.")
+
     except Exception as e:
-        print(f"❌ Erro ao criar administrador padrão: {e}")
+        print(f"❌ Erro ao criar administrador inicial: {e}")

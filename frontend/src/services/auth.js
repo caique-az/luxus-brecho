@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+import { API_URL } from './apiConfig';
 
 // Chaves do localStorage
 const STORAGE_KEYS = {
@@ -303,10 +303,12 @@ export const authService = {
    */
   async requestAccountDeletion(userId) {
     try {
+      const token = this.getAccessToken();
       const response = await fetch(`${API_URL}/users/request-deletion`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ user_id: userId }),
       });
@@ -329,10 +331,12 @@ export const authService = {
    */
   async confirmAccountDeletion(userId, code) {
     try {
+      const token = this.getAccessToken();
       const response = await fetch(`${API_URL}/users/confirm-deletion`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ user_id: userId, code }),
       });

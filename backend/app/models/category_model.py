@@ -6,7 +6,8 @@ Modelo e utilidades para a coleção de categorias.
 """
 from typing import Dict, Any, Tuple, List
 from pymongo import ASCENDING
-from pymongo.collection import ReturnDocument
+
+from ..utils.counters import next_sequence
 
 COLLECTION_NAME = "categories"
 COUNTERS_COLLECTION = "counters"
@@ -180,13 +181,7 @@ def ensure_counters_collection(db):
 
 def get_next_sequence(db, name: str) -> int:
     """Obtém o próximo número sequencial para um contador nomeado."""
-    doc = db[COUNTERS_COLLECTION].find_one_and_update(
-        {"name": name},
-        {"$inc": {"seq": 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER,
-    )
-    return int(doc["seq"]) if doc and "seq" in doc else 1
+    return next_sequence(db, name)
 
 
 def prepare_new_category(db, payload: Dict[str, Any]) -> Tuple[bool, Dict[str, str], Dict[str, Any]]:

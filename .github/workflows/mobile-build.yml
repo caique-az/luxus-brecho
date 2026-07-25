@@ -8,6 +8,9 @@ on:
       - '.github/workflows/mobile-build.yml'
   pull_request:
     branches: [main, dev]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-build.yml'
   workflow_dispatch:
     inputs:
       build_type:
@@ -25,6 +28,12 @@ permissions:
 env:
   EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
+# Cancela builds obsoletos do mesmo ref quando chega um novo push,
+# evitando consumir cota do EAS com builds que serão descartados.
+concurrency:
+  group: mobile-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: 📱 Build Android APK
@@ -32,10 +41,10 @@ jobs:
     
     steps:
       - name: 📥 Checkout código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 🔧 Configurar Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '20'
 
@@ -74,18 +83,25 @@ jobs:
         run: |
           cd mobile
           BUILD_TYPE="${{ github.event.inputs.build_type || 'preview' }}"
-          echo "📱 Iniciando build com profile: $BUILD_TYPE"
-          
-          eas build --platform android --profile $BUILD_TYPE --local --non-interactive --output ../app.apk
-          
-          if [ $? -eq 0 ]; then
-            echo "build_status=success" >> $GITHUB_OUTPUT
-            echo "✅ Build concluído com sucesso!"
-          else
-            echo "build_status=failure" >> $GITHUB_OUTPUT
-            echo "❌ Build falhou!"
+          echo "📱 Iniciando build EAS (cloud) com profile: $BUILD_TYPE"
+
+          # Build na nuvem do Expo (sem --local): o keystore de assinatura
+          # permanece nos servidores do Expo e nunca é baixado para o runner,
+          # evitando o vazamento das credenciais nos logs em caso de falha.
+          eas build --platform android --profile "$BUILD_TYPE" \
+            --non-interactive --wait --json > "$RUNNER_TEMP/build.json"
+
+          APK_URL=$(jq -r '.[0].artifacts.buildUrl // .[0].artifacts.applicationArchiveUrl // empty' "$RUNNER_TEMP/build.json")
+          if [ -z "$APK_URL" ]; then
+            echo "❌ Não foi possível obter a URL do artifact do build:"
+            cat "$RUNNER_TEMP/build.json"
             exit 1
           fi
+
+          echo "⬇️  Baixando APK gerado na nuvem..."
+          curl -fSL -o ../app.apk "$APK_URL"
+          echo "build_status=success" >> $GITHUB_OUTPUT
+          echo "✅ Build concluído e APK baixado!"
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
@@ -100,7 +116,7 @@ jobs:
           echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
 
       - name: 📦 Upload APK como artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: steps.build.outputs.build_status == 'success'
         with:
           name: luxus-brecho-v${{ steps.version.outputs.version }}-build-${{ github.run_number }}
@@ -108,7 +124,7 @@ jobs:
           retention-days: 30
 
       - name: 🚀 Criar GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         if: steps.build.outputs.build_status == 'success'
         with:
           tag_name: v${{ steps.version.outputs.version }}-${{ github.run_number }}
@@ -133,7 +149,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 📧 Enviar email - Sucesso
-        uses: dawidd6/action-send-mail@v3
+        uses: dawidd6/action-send-mail@v9
         if: steps.build.outputs.build_status == 'success'
         with:
           server_address: ${{ secrets.SMTP_SERVER }}
@@ -150,7 +166,7 @@ jobs:
             <p><a href="${{ github.server_url }}/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}-${{ github.run_number }}">📥 Download APK</a></p>
 
       - name: 📧 Enviar email - Falha
-        uses: dawidd6/action-send-mail@v3
+        uses: dawidd6/action-send-mail@v9
         if: steps.build.outputs.build_status == 'failure'
         with:
           server_address: ${{ secrets.SMTP_SERVER }}

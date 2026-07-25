@@ -4,6 +4,7 @@ import { CONFIG } from '../constants/config';
 import { Product } from '../types/product';
 import { getApiUrl } from '../utils/networkUtils';
 import { logger } from '../utils/logger';
+import { authService } from '../services/auth';
 
 export interface CartItem {
   id: number;
@@ -88,7 +89,7 @@ export const useCartStore = create<CartState>((set, get) => ({
         try {
           await fetch(`${getApiUrl()}/cart/${userId}/add`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(await authService.getAuthHeaders()) },
             body: JSON.stringify({ product_id: product.id, quantity: 1 }),
           });
         } catch (e) {
@@ -114,7 +115,7 @@ export const useCartStore = create<CartState>((set, get) => ({
         try {
           await fetch(`${getApiUrl()}/cart/${userId}/remove`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(await authService.getAuthHeaders()) },
             body: JSON.stringify({ product_id: productId }),
           });
         } catch (e) {
@@ -196,7 +197,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       
       await fetch(`${getApiUrl()}/cart/${userId}/sync`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authService.getAuthHeaders()) },
         body: JSON.stringify({ items }),
       });
     } catch (error) {
@@ -207,7 +208,9 @@ export const useCartStore = create<CartState>((set, get) => ({
   loadFromServer: async (userId: number) => {
     set({ loading: true });
     try {
-      const response = await fetch(`${getApiUrl()}/cart/${userId}`);
+      const response = await fetch(`${getApiUrl()}/cart/${userId}`, {
+        headers: await authService.getAuthHeaders(),
+      });
       const data = await response.json();
       
       if (response.ok && data.items) {

@@ -1,23 +1,63 @@
-// Importação condicional do arquivo network-config.json apenas em desenvolvimento
-let networkConfig: any = {
-  mobile: {
-    api_urls: {
-      local: 'http://localhost:5000/api',
-      network: 'http://192.168.1.100:5000/api',
-      emulator: 'http://10.0.2.2:5000/api',
-      production: 'https://luxus-brechoapi.vercel.app/api'
-    }
-  }
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+
+// Porta em que o backend Flask roda na máquina de desenvolvimento
+const API_PORT = process.env.EXPO_PUBLIC_API_PORT || '5000';
+
+const DEFAULT_API_URLS = {
+  local: `http://localhost:${API_PORT}/api`,
+  network: `http://192.168.1.100:${API_PORT}/api`,
+  emulator: `http://10.0.2.2:${API_PORT}/api`,
+  production: 'https://luxus-brechoapi.vercel.app/api'
 };
 
-// Em desenvolvimento, tenta carregar o arquivo gerado localmente
+// network-config.json é opcional: serve apenas como fallback quando o host do
+// dev server não está disponível (ex.: bundle rodando sem Metro alcançável)
+let networkConfig: any = { mobile: { api_urls: DEFAULT_API_URLS } };
+
 if (__DEV__) {
   try {
     networkConfig = require('../network-config.json');
   } catch (error) {
-    console.warn('network-config.json não encontrado, usando valores padrão');
+    // Ausência do arquivo é esperada: a URL da rede é derivada do dev server
   }
 }
+
+const configuredUrl = (key: keyof typeof DEFAULT_API_URLS): string =>
+  networkConfig?.mobile?.api_urls?.[key] || DEFAULT_API_URLS[key];
+
+/**
+ * Host do dev server (Metro). O bundler roda na mesma máquina que o backend,
+ * então o IP usado para baixar o bundle é o IP em que a API está alcançável.
+ * Isso dispensa o network-config.json e sobrevive a trocas de rede Wi-Fi.
+ */
+const getDevServerHost = (): string | null => {
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    (Constants as any).expoGoConfig?.debuggerHost ||
+    (Constants as any).manifest?.debuggerHost;
+
+  if (!hostUri) return null;
+
+  const [host] = String(hostUri).split(':');
+  return host || null;
+};
+
+const LOOPBACK_HOSTS = ['localhost', '127.0.0.1'];
+
+const getNetworkUrl = (): string => {
+  const host = getDevServerHost();
+
+  if (!host) return configuredUrl('network');
+
+  // Metro servido via adb reverse reporta localhost: dentro do emulador Android
+  // a máquina hospedeira só é alcançável por 10.0.2.2 (no iOS, localhost serve)
+  if (LOOPBACK_HOSTS.includes(host)) {
+    return Platform.OS === 'android' ? configuredUrl('emulator') : configuredUrl('local');
+  }
+
+  return `http://${host}:${API_PORT}/api`;
+};
 
 // Função para obter valor de env com fallback
 const getEnvValue = (key: string, fallback: string): string => {
@@ -53,11 +93,12 @@ export const CONFIG = {
   },
 
   // Network Configuration
+  // Precedência da URL de rede: EXPO_PUBLIC_NETWORK_URL > host do dev server > network-config.json
   NETWORK: {
-    LOCAL_URL: getEnvValue('EXPO_PUBLIC_LOCAL_URL', networkConfig.mobile.api_urls.local),
-    NETWORK_URL: getEnvValue('EXPO_PUBLIC_NETWORK_URL', networkConfig.mobile.api_urls.network),
-    EMULATOR_URL: getEnvValue('EXPO_PUBLIC_EMULATOR_URL', networkConfig.mobile.api_urls.emulator),
-    PRODUCTION_URL: getEnvValue('EXPO_PUBLIC_PRODUCTION_URL', networkConfig.mobile.api_urls.production)
+    LOCAL_URL: getEnvValue('EXPO_PUBLIC_LOCAL_URL', configuredUrl('local')),
+    NETWORK_URL: getEnvValue('EXPO_PUBLIC_NETWORK_URL', getNetworkUrl()),
+    EMULATOR_URL: getEnvValue('EXPO_PUBLIC_EMULATOR_URL', configuredUrl('emulator')),
+    PRODUCTION_URL: getEnvValue('EXPO_PUBLIC_PRODUCTION_URL', configuredUrl('production'))
   },
 
   // Cart Configuration

@@ -6,9 +6,9 @@ Endpoints:
 - DELETE /favorites/<product_id> - Remove produto dos favoritos
 - GET /favorites/check/<product_id> - Verifica se produto está favoritado
 """
-from flask import request, jsonify, current_app
+from flask import request, current_app
+from app.utils.db import require_db
 from typing import Any, Dict
-from functools import wraps
 
 from ..models.favorite_model import (
     add_favorite,
@@ -19,45 +19,22 @@ from ..models.favorite_model import (
     ensure_indexes
 )
 from ..models.product_model import get_collection as get_products_collection
+from ..utils.serialization import serialize_doc as _serialize
+from ..utils.responses import ok, err
 
 
-def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
-    """Serializa documento MongoDB removendo _id."""
-    if not doc:
-        return {}
-    d = dict(doc)
-    if '_id' in d:
-        d['_id'] = str(d['_id'])
-    return d
-
-
-def require_auth(f):
-    """Decorator para exigir autenticação."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Pegar user_id do header de autenticação
-        user_id = request.headers.get('X-User-Id')
-        
-        if not user_id:
-            return jsonify(message="Autenticação necessária"), 401
-        
-        return f(user_id, *args, **kwargs)
-    
-    return decorated_function
-
-
-def list_user_favorites(user_id: str):
+@require_db
+def list_user_favorites(user_id: int):
     """
     Lista todos os favoritos do usuário com detalhes dos produtos.
     
     GET /favorites
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     
     Response:
     {
         "favorites": [
             {
-                "_id": "...",
                 "user_id": "...",
                 "product_id": 1,
                 "created_at": "...",
@@ -68,15 +45,13 @@ def list_user_favorites(user_id: str):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Buscar favoritos
     success, error, favorites = get_user_favorites(db, user_id)
     
     if not success:
-        return jsonify(message=error), 500
-    
+        return err(error, 500)
+
     # Buscar detalhes dos produtos
     products_coll = get_products_collection(db)
     product_ids = [fav['product_id'] for fav in favorites]
@@ -101,18 +76,16 @@ def list_user_favorites(user_id: str):
         
         result.append(fav_data)
     
-    return jsonify(
-        favorites=result,
-        total=len(result)
-    ), 200
+    return ok({"favorites": result, "total": len(result)})
 
 
-def add_to_favorites(user_id: str):
+@require_db
+def add_to_favorites(user_id: int):
     """
     Adiciona um produto aos favoritos.
     
     POST /favorites
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     Body: { "product_id": 123 }
     
     Response:
@@ -122,47 +95,47 @@ def add_to_favorites(user_id: str):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Validar payload
     payload = request.get_json()
     if not payload:
-        return jsonify(message="Payload inválido"), 400
-    
+        return err("Payload inválido")
+
     valid, error = validate_favorite_payload(payload)
     if not valid:
-        return jsonify(message=error), 400
-    
+        return err(error)
+
     product_id = payload['product_id']
-    
+
     # Verificar se produto existe
     products_coll = get_products_collection(db)
     product = products_coll.find_one({"id": product_id})
-    
+
     if not product:
-        return jsonify(message="Produto não encontrado"), 404
-    
+        return err("Produto não encontrado", 404)
+
     # Adicionar favorito
     success, error, favorite = add_favorite(db, user_id, product_id)
-    
+
     if not success:
         if "já está nos favoritos" in error:
-            return jsonify(message=error), 409  # Conflict
-        return jsonify(message=error), 500
-    
-    return jsonify(
+            return err(error, 409)  # Conflict
+        return err(error, 500)
+
+    return ok(
         message="Produto adicionado aos favoritos",
+        status=201,
         favorite=_serialize(favorite)
-    ), 201
+    )
 
 
-def remove_from_favorites(user_id: str, product_id: int):
+@require_db
+def remove_from_favorites(user_id: int, product_id: int):
     """
     Remove um produto dos favoritos.
     
     DELETE /favorites/<product_id>
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     
     Response:
     {
@@ -170,26 +143,25 @@ def remove_from_favorites(user_id: str, product_id: int):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Remover favorito
     success, error = remove_favorite(db, user_id, product_id)
     
     if not success:
         if "não encontrado" in error:
-            return jsonify(message=error), 404
-        return jsonify(message=error), 500
-    
-    return jsonify(message="Produto removido dos favoritos"), 200
+            return err(error, 404)
+        return err(error, 500)
+
+    return ok(message="Produto removido dos favoritos")
 
 
-def check_favorite(user_id: str, product_id: int):
+@require_db
+def check_favorite(user_id: int, product_id: int):
     """
     Verifica se um produto está nos favoritos.
     
     GET /favorites/check/<product_id>
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     
     Response:
     {
@@ -197,21 +169,20 @@ def check_favorite(user_id: str, product_id: int):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Verificar se está favoritado
     favorited = is_favorited(db, user_id, product_id)
-    
-    return jsonify(is_favorited=favorited), 200
+
+    return ok(is_favorited=favorited)
 
 
-def toggle_favorite(user_id: str):
+@require_db
+def toggle_favorite(user_id: int):
     """
     Alterna o estado de favorito (adiciona se não existe, remove se existe).
     
     POST /favorites/toggle
-    Headers: X-User-Id: <user_id>
+    Autenticação: Authorization: Bearer <token> (identidade em g.user_id)
     Body: { "product_id": 123 }
     
     Response:
@@ -221,48 +192,47 @@ def toggle_favorite(user_id: str):
     }
     """
     db = current_app.db
-    if db is None:
-        return jsonify(message="Banco de dados indisponível"), 503
     
     # Validar payload
     payload = request.get_json()
     if not payload:
-        return jsonify(message="Payload inválido"), 400
-    
+        return err("Payload inválido")
+
     valid, error = validate_favorite_payload(payload)
     if not valid:
-        return jsonify(message=error), 400
-    
+        return err(error)
+
     product_id = payload['product_id']
-    
+
     # Verificar se produto existe
     products_coll = get_products_collection(db)
     product = products_coll.find_one({"id": product_id})
-    
+
     if not product:
-        return jsonify(message="Produto não encontrado"), 404
-    
+        return err("Produto não encontrado", 404)
+
     # Verificar se já está favoritado
     favorited = is_favorited(db, user_id, product_id)
-    
+
     if favorited:
         # Remover
         success, error = remove_favorite(db, user_id, product_id)
         if not success:
-            return jsonify(message=error), 500
-        
-        return jsonify(
+            return err(error, 500)
+
+        return ok(
             message="Produto removido dos favoritos",
             is_favorited=False
-        ), 200
+        )
     else:
         # Adicionar
         success, error, favorite = add_favorite(db, user_id, product_id)
         if not success:
-            return jsonify(message=error), 500
-        
-        return jsonify(
+            return err(error, 500)
+
+        return ok(
             message="Produto adicionado aos favoritos",
+            status=201,
             is_favorited=True,
             favorite=_serialize(favorite)
-        ), 201
+        )
